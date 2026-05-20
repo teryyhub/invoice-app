@@ -5,6 +5,7 @@ import { BrowserRouter as Router, Route, Routes, Navigate } from "react-router-d
 import PageNotFound from "./lib/PageNotFound";
 import { AuthProvider, useAuth } from "@/lib/AuthContext";
 import UserNotRegisteredError from "@/components/UserNotRegisteredError";
+import { ThemeProvider } from "@/lib/ThemeProvider";
 
 import AppLayout from "./components/layout/AppLayout";
 import Dashboard from "./pages/Dashboard";
@@ -17,6 +18,7 @@ import Customers from "./pages/Customers";
 import ProfileSettings from "./pages/ProfileSettings";
 import Statistics from "./pages/Statistics";
 import Login from "./pages/Login";
+import VerifyOtp from "./pages/VerifyOtp"; // 1. Import the VerifyOtp page
 
 const AuthenticatedApp = () => {
   const { isLoadingAuth, user } = useAuth();
@@ -53,17 +55,23 @@ const AuthenticatedApp = () => {
 
 function App() {
   return (
-    <AuthProvider>
-      <QueryClientProvider client={queryClientInstance}>
-        <Router>
-          <Routes>
-            <Route path="/login" element={<Login />} />
-            <Route path="/*" element={<AuthenticatedApp />} />
-          </Routes>
-        </Router>
-        <Toaster richColors />
-      </QueryClientProvider>
-    </AuthProvider>
+    <ThemeProvider>
+      <AuthProvider>
+        <QueryClientProvider client={queryClientInstance}>
+          <Router>
+            <Routes>
+              {/* Public Routes (Accessible without being logged in) */}
+              <Route path="/login" element={<Login />} />
+              <Route path="/verify" element={<VerifyOtp />} /> {/* 2. Add the Verify route here */}
+              
+              {/* Protected Routes */}
+              <Route path="/*" element={<AuthenticatedApp />} />
+            </Routes>
+          </Router>
+          <Toaster richColors />
+        </QueryClientProvider>
+      </AuthProvider>
+    </ThemeProvider>
   );
 }
 

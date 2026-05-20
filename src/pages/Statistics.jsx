@@ -2,6 +2,7 @@ import React, { useState, useMemo, useRef } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { Invoice } from '@/api/invoices';
 import { VendorProfile } from '@/api/vendorProfiles';
+import { useAuth } from '@/lib/AuthContext'; // 1. Added useAuth import
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Button } from '@/components/ui/button';
@@ -22,18 +23,23 @@ function StatCard({ label, value, sub, color = 'text-primary', highlight = false
 }
 
 export default function Statistics() {
+  const { user } = useAuth(); // 2. Get the current user
   const [activeTab, setActiveTab] = useState('overview');
   const [viewMode, setViewMode] = useState('monthly');
   const [selectedYear, setSelectedYear] = useState(String(new Date().getFullYear()));
   
+  // 3. Updated Invoices Query with safety switch
   const { data: invoices = [], isLoading: loadingInvoices } = useQuery({
-    queryKey: ['statistics-invoices'],
+    queryKey: ['statistics-invoices', user?.id], // Add user ID to the cache key
     queryFn: () => Invoice.list(1000),
+    enabled: !!user?.id, // ONLY fetch if user is logged in (stops 404 on logout)
   });
 
+  // 4. Updated Vendors Query with safety switch
   const { data: vendors = [] } = useQuery({
-    queryKey: ['statistics-vendors'],
+    queryKey: ['statistics-vendors', user?.id], // Add user ID to the cache key
     queryFn: () => VendorProfile.list(100),
+    enabled: !!user?.id, // ONLY fetch if user is logged in
   });
 
   const vendorMap = useMemo(() => {

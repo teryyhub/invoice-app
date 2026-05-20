@@ -1,5 +1,7 @@
 import { createContext, useContext, useEffect, useState } from "react";
 import { supabase } from "./api/supabaseClient";
+// Import your query client instance to clear the cache
+import { queryClientInstance } from "./lib/query-client"; 
 
 const AuthContext = createContext(null);
 
@@ -15,6 +17,11 @@ export function AuthProvider({ children }) {
 
     const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
       setUser(session?.user ?? null);
+      
+      // If the event is SIGNED_OUT, clear the query cache immediately
+      if (_event === 'SIGNED_OUT') {
+        queryClientInstance.clear();
+      }
     });
 
     return () => subscription.unsubscribe();
@@ -22,7 +29,19 @@ export function AuthProvider({ children }) {
 
   const signIn = (email, password) => supabase.auth.signInWithPassword({ email, password });
   const signUp = (email, password) => supabase.auth.signUp({ email, password });
-  const signOut = () => supabase.auth.signOut();
+  
+  // Updated signOut to be async and clear the cache
+  const signOut = async () => {
+    try {
+      await supabase.auth.signOut();
+      // This is the magic line that stops the 404 errors.
+      // It wipes all stored invoices/vendors from memory so they 
+      // don't try to refresh after the user is gone.
+      queryClientInstance.clear(); 
+    } catch (error) {
+      console.error("Error signing out:", error);
+    }
+  };
 
   return (
     <AuthContext.Provider value={{ user, loading, signIn, signUp, signOut }}>

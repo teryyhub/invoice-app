@@ -3,8 +3,7 @@ import { Outlet, Link, useLocation } from "react-router-dom";
 import { FileText, Settings, Upload, LayoutDashboard, LogOut, BarChart2, Users, UserCircle, TrendingUp, Menu, X } from "lucide-react";
 import { useAuth } from "@/lib/AuthContext";
 import { cn } from "@/lib/utils";
-
-export function initTheme() {}
+import ThemeToggle from "@/components/layout/ThemeToggle"; // FIXED: Using @ alias for absolute path
 
 const navItems = [
   { path: "/",          label: "Dashboard",         icon: LayoutDashboard },
@@ -45,7 +44,7 @@ export default function AppLayout() {
   );
 
   return (
-    <div className="min-h-screen bg-background flex">
+    <div className="min-h-screen bg-background flex text-foreground">
       {/* Sidebar */}
       <aside className="hidden md:flex w-64 flex-col bg-card border-r border-border fixed inset-y-0 z-30">
         {/* Logo */}
@@ -66,8 +65,13 @@ export default function AppLayout() {
           {navItems.map(item => <NavLink key={item.path} item={item} />)}
         </nav>
 
-        {/* Logout */}
-        <div className="p-4 border-t border-border">
+        {/* Footer Actions */}
+        <div className="p-4 border-t border-border space-y-2">
+          <div className="flex items-center justify-between px-3 py-2 text-xs text-muted-foreground font-medium">
+            <span className="opacity-70">Appearance</span>
+            <ThemeToggle />
+          </div>
+          
           <button
             onClick={handleLogout}
             className="flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium text-muted-foreground hover:bg-destructive/10 hover:text-destructive transition-all w-full"
@@ -87,9 +91,13 @@ export default function AppLayout() {
             </div>
             <h1 className="text-sm font-bold text-foreground">Siva's Chola Invoices</h1>
           </div>
-          <button onClick={() => setMobileOpen(o => !o)} className="p-2 rounded-lg text-muted-foreground hover:bg-accent transition-colors">
-            {mobileOpen ? <X className="w-5 h-5" /> : <Menu className="w-5 h-5" />}
-          </button>
+          
+          <div className="flex items-center gap-2">
+            <ThemeToggle />
+            <button onClick={() => setMobileOpen(o => !o)} className="p-2 rounded-lg text-muted-foreground hover:bg-accent transition-colors">
+              {mobileOpen ? <X className="w-5 h-5" /> : <Menu className="w-5 h-5" />}
+            </button>
+          </div>
         </div>
 
         {mobileOpen && (

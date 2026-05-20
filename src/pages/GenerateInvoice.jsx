@@ -4,6 +4,7 @@ import { Invoice } from "@/api/invoices";
 import { VendorProfile } from "@/api/vendorProfiles";
 import { uploadFile } from "@/api/storage";
 import { extractDataFromFile } from "@/api/extractor";
+import { useAuth } from "@/lib/AuthContext"; 
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -44,6 +45,7 @@ function normalizeName(name) {
 }
 
 export default function GenerateInvoice() {
+  const { user } = useAuth(); 
   const navigate = useNavigate();
   const queryClient = useQueryClient();
   const [uploading, setUploading] = useState(false);
@@ -62,19 +64,21 @@ export default function GenerateInvoice() {
   });
 
   const { data: invoices = [] } = useQuery({
-    queryKey: ["invoices"],
+    queryKey: ["invoices", user?.id],
     queryFn: () => Invoice.list(500),
+    enabled: !!user?.id,
   });
 
   const { data: vendors = [], isLoading: loadingVendors } = useQuery({
-    queryKey: ["vendors"],
+    queryKey: ["vendors", user?.id],
     queryFn: () => VendorProfile.list(100),
+    enabled: !!user?.id,
   });
 
   const createMutation = useMutation({
     mutationFn: (data) => Invoice.create(data),
     onSuccess: (result) => {
-      queryClient.invalidateQueries({ queryKey: ["invoices"] });
+      queryClient.invalidateQueries({ queryKey: ["invoices", user?.id] });
       toast.success("Invoice generated successfully!");
       navigate(`/invoice/${result.id}`);
     },
@@ -86,64 +90,68 @@ export default function GenerateInvoice() {
 
     setVendorError("");
     setMatchedVendor(null);
+    setExtracted(false);
 
     try {
-      // Extract text FIRST before uploading (file stream gets consumed after upload)
       setExtracting(true);
       const result = await extractDataFromFile(file);
       setExtracting(false);
 
-      // Upload file to storage
       setUploading(true);
       const { file_url } = await uploadFile(file);
       setFileUrl(file_url);
       setUploading(false);
-      toast.success("File uploaded, extracting data...");
 
       if (result.status === "success" && result.output) {
         const d = result.output;
+        console.log("Extracted Data:", d); // DEBUG
 
-        const extractedVendorName = normalizeName(d.vendor_name);
+        const extractedName = normalizeName(d.vendor_name);
+        console.log("Normalized Extracted Vendor:", extractedName); // DEBUG
+
         let foundVendor = null;
-        if (extractedVendorName) {
+        if (extractedName) {
           foundVendor = vendors.find(v => {
             const savedName = normalizeName(v.vendor_name);
-            return savedName === extractedVendorName || savedName.includes(extractedVendorName) || extractedVendorName.includes(savedName);
+            return savedName === extractedName || 
+                   extractedName.includes(savedName) || 
+                   savedName.includes(extractedName);
           });
-          if (!foundVendor) {
-            setVendorError(`Vendor "${d.vendor_name}" from the delivery order is not saved. Please add this vendor in Vendor Settings.`);
-            setExtracting(false);
-            toast.error("Vendor not found in saved profiles");
-            return;
-          }
+        }
+
+        if (foundVendor) {
+          setMatchedVendor(foundVendor);
+          setVendorError("");
+        } else {
+          setMatchedVendor(null);
+          setVendorError(`Vendor "${d.vendor_name || 'Unknown'}" not found in your settings.`);
         }
 
         if (d.imei_serial) {
           const duplicate = invoices.find(inv => inv.imei_serial?.trim() === d.imei_serial.trim());
           if (duplicate) {
             toast.error(`Duplicate: Invoice ${duplicate.invoice_number} already exists for IMEI ${d.imei_serial}`);
-            setExtracting(false);
             return;
           }
         }
 
-        setMatchedVendor(foundVendor);
         setForm(prev => ({
           ...prev,
           customer_name: d.customer_name || prev.customer_name,
           customer_mobile: d.customer_mobile || prev.customer_mobile,
           customer_address: d.customer_address || prev.customer_address,
-          product_description: `${d.manufacturer || ""} ${d.category || ""}`.trim() || prev.product_description,
+          product_description: d.manufacturer || d.category || prev.product_description, 
           product_model: d.model || prev.product_model,
           imei_serial: d.imei_serial || prev.imei_serial,
           product_price: d.product_price ? String(d.product_price) : prev.product_price,
           invoice_date: parseDeliveryDate(d.delivery_date),
           delivery_order_number: d.delivery_order_number || prev.delivery_order_number,
         }));
+        
         setExtracted(true);
         toast.success("Data extracted successfully!");
       } else {
-        toast.error("Failed to extract data. Please fill in manually.");
+        toast.error("Failed to extract data.");
       }
     } catch (err) {
       toast.error("Upload failed: " + err.message);
@@ -153,19 +161,20 @@ export default function GenerateInvoice() {
   };
 
   const handleGenerate = () => {
-    if (!matchedVendor) { toast.error("No matched vendor. Please upload a delivery order first."); return; }
-    if (!form.customer_name || !form.product_price) { toast.error("Customer name and product price are required"); return; }
+    if (!matchedVendor) { 
+      toast.error("Please match a vendor in Settings first."); 
+      return; 
+    }
+    if (!form.customer_name || !form.product_price) { 
+      toast.error("Customer name and product price are required"); 
+      return; 
+    }
 
     const price = parseFloat(form.product_price);
     const rate = Math.round(price * 0.8475 * 100) / 100;
     const cgst = Math.round(price * 0.0763 * 100) / 100;
     const sgst = Math.round(price * 0.0763 * 100) / 100;
     const invoiceNumber = getNextInvoiceNumber(invoices, form.invoice_date);
-
-    if (form.imei_serial) {
-      const dup = invoices.find(inv => inv.imei_serial?.trim() === form.imei_serial.trim());
-      if (dup) { toast.error(`Duplicate: Invoice ${dup.invoice_number} already exists for this IMEI`); return; }
-    }
 
     createMutation.mutate({
       invoice_number: invoiceNumber,
@@ -195,7 +204,7 @@ export default function GenerateInvoice() {
 
   return (
     <div className="space-y-6">
-      <div>
+      <div className="flex flex-col gap-1">
         <h1 className="text-2xl font-bold text-foreground">Generate Invoice</h1>
         <p className="text-muted-foreground mt-1">Upload a delivery order to auto-fill invoice details</p>
       </div>
@@ -212,11 +221,11 @@ export default function GenerateInvoice() {
         </Card>
       )}
 
-      {vendorError && (
+      {extracted && vendorError && (
         <Card className="border-destructive bg-destructive/5">
           <CardContent className="p-4 flex items-start gap-3">
             <AlertCircle className="w-5 h-5 text-destructive shrink-0 mt-0.5" />
-            <div>
+            <div className="flex-1">
               <p className="text-sm text-destructive font-semibold">Vendor Not Found</p>
               <p className="text-sm text-destructive mt-0.5">{vendorError}</p>
               <Link to="/settings">
@@ -243,10 +252,12 @@ export default function GenerateInvoice() {
                   <Loader2 className="w-8 h-8 text-primary animate-spin" />
                   <p className="text-sm text-muted-foreground">{uploading ? "Uploading file..." : "Extracting data with AI..."}</p>
                 </div>
-              ) : extracted && matchedVendor ? (
+              ) : extracted ? (
                 <div className="flex flex-col items-center gap-2">
                   <CheckCircle2 className="w-8 h-8 text-green-600" />
-                  <p className="text-sm text-green-600 font-medium">Data extracted — Vendor: <span className="font-bold">{matchedVendor.vendor_name}</span></p>
+                  <p className="text-sm text-green-600 font-medium">
+                    {matchedVendor ? `Vendor matched: ${matchedVendor.vendor_name}` : "Data extracted, but vendor not matched"}
+                  </p>
                   <p className="text-xs text-muted-foreground">Click to upload a different file</p>
                 </div>
               ) : (
@@ -261,21 +272,31 @@ export default function GenerateInvoice() {
         </CardContent>
       </Card>
 
-      {extracted && matchedVendor && (
+      {extracted && (
         <Card>
           <CardHeader>
             <CardTitle className="text-lg">Invoice Details</CardTitle>
             <CardDescription>Review and edit extracted information if needed</CardDescription>
           </CardHeader>
           <CardContent className="space-y-5">
-            <div className="flex items-center gap-2 bg-green-50 border border-green-200 rounded-lg p-3">
-              <CheckCircle2 className="w-4 h-4 text-green-600 shrink-0" />
-              <div className="text-sm">
-                <span className="text-green-700 font-medium">Vendor matched: </span>
-                <span className="text-green-800 font-bold">{matchedVendor.vendor_name}</span>
-                <span className="text-green-600 ml-2 text-xs">GSTIN: {matchedVendor.gstin}</span>
+            {matchedVendor ? (
+              <div className="flex items-center gap-2 bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-800 rounded-lg p-3">
+                <CheckCircle2 className="w-4 h-4 text-green-600 shrink-0" />
+                <div className="text-sm">
+                  <span className="text-green-700 dark:text-green-400 font-medium">Vendor matched: </span>
+                  <span className="text-green-800 dark:text-green-300 font-bold">{matchedVendor.vendor_name}</span>
+                  <span className="text-green-600 dark:text-green-500 ml-2 text-xs">GSTIN: {matchedVendor.gstin}</span>
+                </div>
               </div>
-            </div>
+            ) : (
+              <div className="flex items-center gap-2 bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 rounded-lg p-3">
+                <AlertCircle className="w-4 h-4 text-amber-600 shrink-0" />
+                <div className="text-sm">
+                  <span className="text-amber-700 dark:text-amber-400 font-medium">Action Required: </span>
+                  <span className="text-amber-800 dark:text-amber-300">No vendor matched. Please add the vendor in settings first.</span>
+                </div>
+              </div>
+            )}
 
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div className="space-y-2"><Label>Customer Name *</Label><Input value={form.customer_name} onChange={e => setForm(p => ({ ...p, customer_name: e.target.value }))} /></div>

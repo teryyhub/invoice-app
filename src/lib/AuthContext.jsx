@@ -1,43 +1,80 @@
 import { createContext, useContext, useEffect, useState } from "react";
-import { supabase } from "@/api/supabaseClient";
+import { supabase } from "@/api/supabaseClient"; // FIXED: Using @ alias to reach src/api
+import { queryClientInstance } from "@/lib/query-client"; // FIXED: Using @ alias to reach src/lib
 
 const AuthContext = createContext(null);
 
 export function AuthProvider({ children }) {
-  const [user, setUser] = useState(undefined); // undefined = still loading
-  const [isLoadingAuth, setIsLoadingAuth] = useState(true);
-  const [isLoadingPublicSettings] = useState(false);
-  const [authError] = useState(null);
+  const [user, setUser] = useState(null);
+  const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    // Get initial session
     supabase.auth.getSession().then(({ data: { session } }) => {
       setUser(session?.user ?? null);
-      setIsLoadingAuth(false);
+      setLoading(false);
     });
 
-    // Listen for auth changes
     const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
       setUser(session?.user ?? null);
-      setIsLoadingAuth(false);
+      
+      // Clear cache on sign out to prevent 404 errors
+      if (_event === 'SIGNED_OUT') {
+        queryClientInstance.clear();
+      }
     });
 
     return () => subscription.unsubscribe();
   }, []);
 
-  const navigateToLogin = () => { window.location.href = "/login"; };
+  // --- Standard Auth Methods ---
+  const signIn = (email, password) => supabase.auth.signInWithPassword({ email, password });
+  const signUp = (email, password) => supabase.auth.signUp({ email, password });
+  
+  const signOut = async () => {
+    try {
+      await supabase.auth.signOut();
+      queryClientInstance.clear(); 
+    } catch (error) {
+      console.error("Error signing out:", error);
+    }
+  };
+
+  // --- Google Login Method ---
+  const signInWithGoogle = async () => {
+    const { data, error } = await supabase.auth.signInWithOAuth({
+      provider: 'google',
+      options: {
+        redirectTo: window.location.origin, 
+      },
+    });
+    if (error) throw error;
+    return data;
+  };
+
+  // --- OTP Verification Method ---
+  const verifyOtp = async (email, token) => {
+    const { data, error } = await supabase.auth.verifyOTP({
+      email,
+      token,
+      type: 'signup',
+    });
+    if (error) throw error;
+    return data;
+  };
 
   return (
-    <AuthContext.Provider value={{
-      user,
-      isLoadingAuth,
-      isLoadingPublicSettings,
-      authError,
-      navigateToLogin,
-      signIn: (email, password) => supabase.auth.signInWithPassword({ email, password }),
-      signUp: (email, password) => supabase.auth.signUp({ email, password }),
-      signOut: () => supabase.auth.signOut(),
-    }}>
+    <AuthContext.Provider 
+      value={{ 
+        user, 
+        loading, 
+        isLoadingAuth: loading, 
+        signIn, 
+        signUp, 
+        signOut, 
+        signInWithGoogle, 
+        verifyOtp 
+      }}
+    >
       {children}
     </AuthContext.Provider>
   );

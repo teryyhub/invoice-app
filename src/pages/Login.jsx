@@ -1,10 +1,10 @@
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { useAuth } from "@/lib/AuthContext";
-import { FileText } from "lucide-react";
+import { FileText, Chrome } from "lucide-react";
 
 export default function Login() {
-  const { signIn, signUp } = useAuth();
+  const { signIn, signUp, signInWithGoogle } = useAuth(); 
   const navigate = useNavigate();
   const [isSignUp, setIsSignUp] = useState(false);
   const [email, setEmail] = useState("");
@@ -20,8 +20,8 @@ export default function Login() {
       if (isSignUp) {
         const { error } = await signUp(email, password);
         if (error) throw error;
-        setMessage("Account created! Check your email to confirm, then sign in.");
-        setIsSignUp(false);
+        setMessage("Verification email sent! Please check your inbox.");
+        setTimeout(() => navigate("/verify", { state: { email } }), 2000);
       } else {
         const { error } = await signIn(email, password);
         if (error) throw error;
@@ -36,13 +36,11 @@ export default function Login() {
 
   return (
     <div className="min-h-screen flex items-center justify-center bg-background px-4">
-      {/* Glow effect */}
       <div className="absolute inset-0 overflow-hidden pointer-events-none">
         <div className="absolute top-1/4 left-1/2 -translate-x-1/2 w-96 h-96 bg-primary/10 rounded-full blur-3xl" />
       </div>
 
       <div className="w-full max-w-sm relative">
-        {/* Logo */}
         <div className="text-center mb-8">
           <div className="w-14 h-14 rounded-2xl bg-primary flex items-center justify-center mx-auto mb-4 shadow-lg shadow-primary/30">
             <FileText className="w-7 h-7 text-primary-foreground" />
@@ -53,16 +51,14 @@ export default function Login() {
           </p>
         </div>
 
-        {/* Card */}
         <div className="bg-card border border-border rounded-2xl p-8 shadow-xl">
           <form onSubmit={handleSubmit} className="space-y-4">
             <div className="space-y-1.5">
               <label className="text-sm font-medium text-foreground" htmlFor="email">Email</label>
               <input
-                id="email" type="email" required autoComplete="email"
+                id="email" type="email" required 
                 value={email} onChange={e => setEmail(e.target.value)}
-                placeholder="you@example.com"
-                className="w-full rounded-lg border border-border bg-input px-3 py-2.5 text-sm text-foreground placeholder:text-muted-foreground outline-none focus:ring-2 focus:ring-primary focus:border-primary transition-all"
+                className="w-full rounded-lg border border-border bg-input px-3 py-2.5 text-sm text-foreground outline-none focus:ring-2 focus:ring-primary"
               />
             </div>
 
@@ -70,10 +66,8 @@ export default function Login() {
               <label className="text-sm font-medium text-foreground" htmlFor="password">Password</label>
               <input
                 id="password" type="password" required
-                autoComplete={isSignUp ? "new-password" : "current-password"}
                 value={password} onChange={e => setPassword(e.target.value)}
-                placeholder="••••••••"
-                className="w-full rounded-lg border border-border bg-input px-3 py-2.5 text-sm text-foreground placeholder:text-muted-foreground outline-none focus:ring-2 focus:ring-primary focus:border-primary transition-all"
+                className="w-full rounded-lg border border-border bg-input px-3 py-2.5 text-sm text-foreground outline-none focus:ring-2 focus:ring-primary"
               />
             </div>
 
@@ -82,11 +76,29 @@ export default function Login() {
 
             <button
               type="submit" disabled={loading}
-              className="w-full rounded-lg bg-primary text-primary-foreground py-2.5 text-sm font-semibold hover:bg-primary/90 transition-all shadow-md shadow-primary/20 disabled:opacity-50 mt-2"
+              className="w-full rounded-lg bg-primary text-primary-foreground py-2.5 text-sm font-semibold hover:bg-primary/90 transition-all shadow-md disabled:opacity-50 mt-2"
             >
               {loading ? "Please wait…" : isSignUp ? "Create Account" : "Sign In"}
             </button>
           </form>
+
+          {/* THE GOOGLE BUTTON SECTION */}
+          <div className="relative my-6">
+            <div className="absolute inset-0 flex items-center">
+              <span className="w-full border-t border-border"></span>
+            </div>
+            <div className="relative flex justify-center text-xs uppercase">
+              <span className="bg-card px-2 text-muted-foreground">Or continue with</span>
+            </div>
+          </div>
+
+          <button 
+            onClick={() => signInWithGoogle()}
+            className="w-full flex items-center justify-center gap-3 rounded-lg border border-border bg-background py-2.5 text-sm font-medium text-foreground hover:bg-accent transition-all shadow-sm"
+          >
+            <Chrome className="w-4 h-4" />
+            Sign in with Google
+          </button>
 
           <p className="text-center text-sm text-muted-foreground mt-6">
             {isSignUp ? "Already have an account?" : "Don't have an account?"}{" "}
