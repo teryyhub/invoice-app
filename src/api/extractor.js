@@ -15,12 +15,15 @@ async function loadPdfJs() {
 export async function extractDataFromFile(file) {
   const isImage = file.type.startsWith("image/");
   if (isImage) {
-    return { status: "success", output: {
-      vendor_name: null, delivery_order_number: null, delivery_date: null,
-      customer_name: null, customer_mobile: null, customer_address: null,
-      manufacturer: null, category: null, model: null,
-      imei_serial: null, product_price: null,
-    }};
+    return {
+      status: "success",
+      output: {
+        vendor_name: null, delivery_order_number: null, delivery_date: null,
+        customer_name: null, customer_mobile: null, customer_address: null,
+        manufacturer: null, category: null, model: null,
+        imei_serial: null, product_price: null,
+      },
+    };
   }
 
   try {
@@ -37,7 +40,7 @@ export async function extractDataFromFile(file) {
     for (let i = 1; i <= pdf.numPages; i++) {
       const page = await pdf.getPage(i);
       const content = await page.getTextContent();
-      fullText += content.items.map(item => item.str).join(" ") + "\n";
+      fullText += content.items.map((item) => item.str).join(" ") + "\n";
     }
 
     console.log("PDF extracted text:", fullText);
@@ -53,8 +56,10 @@ export async function extractDataFromFile(file) {
 }
 
 function parseDeliveryOrderText(text) {
-  const lines = text.split(/\s{2,}|\n/).map(l => l.trim()).filter(Boolean);
-  const full = text.replace(/\s+/g, " ");
+  // Normalize: collapse runs of spaces/tabs to single space, keep newlines
+  const lines = text.split("\n").map((l) => l.trim()).filter(Boolean);
+  // Single-space collapsed version for regex matching
+  const full = text.replace(/[ \t]+/g, " ");
 
   const get = (patterns) => {
     for (const pattern of patterns) {
@@ -64,59 +69,122 @@ function parseDeliveryOrderText(text) {
     return null;
   };
 
-  // Vendor name: after "To: CDAP300243 SREE VASAVI MOBILES"
-  let vendor_name = get([
-    /To:\s*CDAP\d+\s+([A-Z][A-Z\s]+?)(?:\s+[\d\/])/,
-    /To:\s*[A-Z0-9]+\s+([A-Z][A-Z\s]+?)(?:\s+\d)/,
-  ]);
-  if (!vendor_name) {
-    const toIdx = lines.findIndex(l => /^To:?$/i.test(l) || l.startsWith("To:"));
-    if (toIdx >= 0) {
-      for (let i = toIdx + 1; i < toIdx + 5; i++) {
-        if (lines[i] && !/^CDAP\d+$/i.test(lines[i])) { vendor_name = lines[i]; break; }
+  // --- Vendor name ---
+  // Layout: "To:" on one line, next line is "CDAP300243", then vendor name
+  let vendor_name = null;
+  const toLineIdx = lines.findIndex((l) => /^To:?$/i.test(l));
+  if (toLineIdx >= 0) {
+    for (let i = toLineIdx + 1; i < toLineIdx + 6; i++) {
+      if (lines[i] && /^CDAP\d+$/i.test(lines[i])) {
+        if (lines[i + 1]) { vendor_name = lines[i + 1]; break; }
       }
     }
   }
+  // Fallback: inline "To: CDAP... NAME"
+  if (!vendor_name) {
+    vendor_name = get([/To:\s*CDAP\d+\s+([A-Z][A-Z\s]+?)(?:\s{2,}|\d|$)/]);
+  }
 
+  // --- Application ID / Delivery Order Number ---
   const appId = get([
     /Application\s*ID:\s*(CDAP[A-Z0-9]+)/i,
-    /\b(CDAP[A-Z0-9]{5,}B[0-9]+)\b/,
-    /\b(CDAP[A-Z0-9]{5,}X[0-9]+)\b/,
+    /\b(CDAP[A-Z0-9]{6,})\b/,
   ]);
 
-  const rawDate = get([
-    /Date:\s*(\d{1,2}-\d{1,2}-\s*\d{4})/i,
-    /Date:\s*(\d{1,2}\/\d{1,2}\/\d{4})/i,
-  ]);
-  const delivery_date = rawDate ? rawDate.replace(/\s+/g, "") : null;
+  // --- Date ---
+  // Handle split date across lines: "Date: 29-04-" ... "2026"
+  let delivery_date = null;
+  for (let i = 0; i < lines.length; i++) {
+    // Case 1: date fully on one line
+    let m = lines[i].match(/Date:\s*(\d{1,2}[-\/]\d{1,2}[-\/]\d{4})/i);
+    if (m) { delivery_date = m[1].replace(/\s+/g, ""); break; }
+    // Case 2: date split across lines ("Date: 29-04-" ... "2026")
+    m = lines[i].match(/Date:\s*(\d{1,2}[-\/]\d{1,2}[-\/])\s*$/i);
+    if (m && lines[i + 1]) {
+      const yearMatch = lines[i + 1].match(/^(\d{4})/);
+      if (yearMatch) { delivery_date = m[1] + yearMatch[1]; break; }
+    }
+  }
 
+  // --- Customer fields ---
   const customer_name = get([
-    /Customer Name:\s*([A-Za-z\s]+?)(?:\s{2,}|Mobile:|$)/i,
-    /Customer Name:\s*([^\n]+)/i,
+    /Customer Name:\s*([A-Za-z][A-Za-z\s]+?)(?:\s{2,}|Mobile:|$)/i,
   ]);
 
   const customer_mobile = get([
-    /Mobile:\s*(\d{10})/i,
+    /Mobile:\s*([6-9]\d{9})\b/i,
     /\b([6-9]\d{9})\b/,
   ]);
 
-  const customer_address = get([
-    /Customer Address:\s*(.+?)(?=\s{2,}|PRODUCT DETAILS|Manufacturer)/i,
-    /Customer Address:\s*([^\n]+)/i,
+  // Address: after label, until section break or next known label
+  const customer_address =
+    get([/Customer Address:\s*(.+?)(?=\s{2,}|PRODUCT DETAILS|Manufacturer:|$)/is]) ||
+    (() => {
+      const idx = lines.findIndex((l) => /Customer Address:/i.test(l));
+      if (idx < 0) return null;
+      const addrOnSameLine = lines[idx].replace(/Customer Address:/i, "").trim();
+      if (addrOnSameLine) return addrOnSameLine;
+      return lines[idx + 1] || null;
+    })();
+
+  // --- Product fields ---
+  const manufacturer =
+    get([/Manufacturer:\s*([A-Za-z0-9]+)(?:\s{2,}|Category:|$)/i]) ||
+    (() => {
+      const idx = lines.findIndex((l) => /^Manufacturer:$/i.test(l));
+      return idx >= 0 ? lines[idx + 1] : null;
+    })();
+
+  const category =
+    get([/Category:\s*([A-Za-z\s]+?)(?:\s{2,}|Model:|$)/i]) ||
+    (() => {
+      const idx = lines.findIndex((l) => /^Category:$/i.test(l));
+      return idx >= 0 ? lines[idx + 1] : null;
+    })();
+
+  // Model can span two lines: "SMART PHONES -\nRENO15C12256CPH2801"
+  let model = null;
+  const modelLabelIdx = lines.findIndex((l) => /^Model:$/i.test(l));
+  if (modelLabelIdx >= 0) {
+    const parts = [];
+    for (let i = modelLabelIdx + 1; i < modelLabelIdx + 4; i++) {
+      if (!lines[i] || /^(IMEI|Scheme Name|Manufacturer|Category)/i.test(lines[i])) break;
+      parts.push(lines[i].trim());
+    }
+    model = parts.join(" ") || null;
+  }
+  if (!model) {
+    model = get([/Model:\s*(.+?)(?=\s{2,}|IMEI|Scheme|$)/i]);
+    if (model && model.endsWith("-")) {
+      const afterModel = full.match(/Model:\s*.+?(-)\s+([A-Z0-9]+)/i);
+      if (afterModel) model = model + " " + afterModel[2];
+    }
+  }
+
+  const imei_serial = get([
+    /IMEI\/Serial\s*Number:\s*(\d{10,20})/i,
+    /\b(\d{15})\b/,
   ]);
 
-  const manufacturer = get([/Manufacturer:\s*([A-Za-z0-9\s]+?)(?:\s{2,}|Category:|$)/i]);
-  const category = get([/Category:\s*([A-Za-z\s]+?)(?:\s{2,}|Model:|$)/i, /(MOBILE PHONE|smartphone|tablet)/i]);
-  const model = get([/Model:\s*([^\s][^\n]+?)(?:\s{2,}|IMEI|$)/i]);
-  const imei_serial = get([/IMEI\/Serial\s*Number:\s*(\d{15})/i, /\b(\d{15})\b/]);
-
-  const priceMatch = full.match(/A\.\s*Product\s*Price\s+(\d[\d,]*)/i)
-    || full.match(/Product\s*Price\s*[:\-]?\s*(?:Rs\.?\s*)?(\d[\d,]*)/i);
-  const product_price = priceMatch ? parseFloat(priceMatch[1].replace(/,/g, "")) : null;
+  // Product price: "A. Product Price   44999"
+  const priceMatch =
+    full.match(/A\.\s*Product\s*Price\s+(\d[\d,]*)/i) ||
+    full.match(/Product\s*Price\s*[:\-]?\s*(?:Rs\.?\s*)?(\d[\d,]*)/i);
+  const product_price = priceMatch
+    ? parseFloat(priceMatch[1].replace(/,/g, ""))
+    : null;
 
   return {
-    vendor_name, delivery_order_number: appId, delivery_date,
-    customer_name, customer_mobile, customer_address,
-    manufacturer, category, model, imei_serial, product_price,
+    vendor_name,
+    delivery_order_number: appId,
+    delivery_date,
+    customer_name,
+    customer_mobile,
+    customer_address,
+    manufacturer,
+    category,
+    model,
+    imei_serial,
+    product_price,
   };
 }
