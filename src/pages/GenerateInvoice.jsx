@@ -104,18 +104,12 @@ export default function GenerateInvoice() {
 
       if (result.status === "success" && result.output) {
         const d = result.output;
-        console.log("Extracted Data:", d); // DEBUG
-
         const extractedName = normalizeName(d.vendor_name);
-        console.log("Normalized Extracted Vendor:", extractedName); // DEBUG
-
         let foundVendor = null;
         if (extractedName) {
           foundVendor = vendors.find(v => {
             const savedName = normalizeName(v.vendor_name);
-            return savedName === extractedName || 
-                   extractedName.includes(savedName) || 
-                   savedName.includes(extractedName);
+            return savedName === extractedName || extractedName.includes(savedName) || savedName.includes(extractedName);
           });
         }
 
@@ -124,7 +118,7 @@ export default function GenerateInvoice() {
           setVendorError("");
         } else {
           setMatchedVendor(null);
-          setVendorError(`Vendor "${d.vendor_name || 'Unknown'}" not found in your settings.`);
+          setVendorError(`Vendor "${d.vendor_name || 'Unknown'}" not found in settings.`);
         }
 
         if (d.imei_serial) {
@@ -147,7 +141,6 @@ export default function GenerateInvoice() {
           invoice_date: parseDeliveryDate(d.delivery_date),
           delivery_order_number: d.delivery_order_number || prev.delivery_order_number,
         }));
-        
         setExtracted(true);
         toast.success("Data extracted successfully!");
       } else {
@@ -161,14 +154,8 @@ export default function GenerateInvoice() {
   };
 
   const handleGenerate = () => {
-    if (!matchedVendor) { 
-      toast.error("Please match a vendor in Settings first."); 
-      return; 
-    }
-    if (!form.customer_name || !form.product_price) { 
-      toast.error("Customer name and product price are required"); 
-      return; 
-    }
+    if (!matchedVendor) { toast.error("Please match a vendor in Settings first."); return; }
+    if (!form.customer_name || !form.product_price) { toast.error("Customer name and product price are required"); return; }
 
     const price = parseFloat(form.product_price);
     const rate = Math.round(price * 0.8475 * 100) / 100;

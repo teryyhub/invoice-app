@@ -2,6 +2,7 @@ import React from "react";
 import { useQuery } from "@tanstack/react-query";
 import { Invoice } from "@/api/invoices";
 import { VendorProfile } from "@/api/vendorProfiles";
+import { useAuth } from "@/lib/AuthContext"; 
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Link } from "react-router-dom";
@@ -9,17 +10,21 @@ import { FileText, Upload, TrendingUp, IndianRupee } from "lucide-react";
 import { format } from "date-fns";
 
 export default function Dashboard() {
+  const { user } = useAuth();
+
   const { data: invoices = [], isLoading } = useQuery({
-    queryKey: ["invoices"],
-    queryFn: () => Invoice.list(50),
+    queryKey: ["dashboard-invoices", user?.id], 
+    queryFn: () => Invoice.list(99999), // UPDATED: Now supports up to 99,999 invoices
+    enabled: !!user?.id, 
   });
 
   const { data: vendor } = useQuery({
-    queryKey: ["vendor"],
+    queryKey: ["vendor", user?.id],
     queryFn: async () => {
       const list = await VendorProfile.list(1);
       return list[0] || null;
     },
+    enabled: !!user?.id,
   });
 
   const currentMonth = format(new Date(), "MMM yyyy");
