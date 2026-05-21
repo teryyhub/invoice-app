@@ -15,16 +15,28 @@ export default function Login() {
 
   async function handleSubmit(e) {
     e.preventDefault();
-    setError(""); setMessage(""); setLoading(true);
+    setError(""); 
+    setMessage(""); 
+    setLoading(true);
+
     try {
       if (isSignUp) {
-        const { error } = await signUp(email, password);
-        if (error) throw error;
-        setMessage("Verification email sent! Please check your inbox.");
-        setTimeout(() => navigate("/verify", { state: { email } }), 2000);
+        // --- SIGN UP FLOW ---
+        const { error: signUpError } = await signUp(email, password);
+        if (signUpError) throw signUpError;
+        
+        setMessage("Confirmation email sent! Please click the link in your inbox to activate your account.");
+        
+        // Switch back to login mode after a few seconds so they can sign in once verified
+        setTimeout(() => {
+          setIsSignUp(false);
+          setMessage("");
+        }, 6000);
       } else {
-        const { error } = await signIn(email, password);
-        if (error) throw error;
+        // --- SIGN IN FLOW ---
+        const { error: signInError } = await signIn(email, password);
+        if (signInError) throw signInError;
+        
         navigate("/", { replace: true });
       }
     } catch (err) {
@@ -36,11 +48,13 @@ export default function Login() {
 
   return (
     <div className="min-h-screen flex items-center justify-center bg-background px-4">
+      {/* Glow effect */}
       <div className="absolute inset-0 overflow-hidden pointer-events-none">
         <div className="absolute top-1/4 left-1/2 -translate-x-1/2 w-96 h-96 bg-primary/10 rounded-full blur-3xl" />
       </div>
 
       <div className="w-full max-w-sm relative">
+        {/* Logo */}
         <div className="text-center mb-8">
           <div className="w-14 h-14 rounded-2xl bg-primary flex items-center justify-center mx-auto mb-4 shadow-lg shadow-primary/30">
             <FileText className="w-7 h-7 text-primary-foreground" />
@@ -51,14 +65,16 @@ export default function Login() {
           </p>
         </div>
 
+        {/* Card */}
         <div className="bg-card border border-border rounded-2xl p-8 shadow-xl">
           <form onSubmit={handleSubmit} className="space-y-4">
             <div className="space-y-1.5">
               <label className="text-sm font-medium text-foreground" htmlFor="email">Email</label>
               <input
-                id="email" type="email" required 
+                id="email" type="email" required autoComplete="email"
                 value={email} onChange={e => setEmail(e.target.value)}
-                className="w-full rounded-lg border border-border bg-input px-3 py-2.5 text-sm text-foreground outline-none focus:ring-2 focus:ring-primary"
+                placeholder="you@example.com"
+                className="w-full rounded-lg border border-border bg-input px-3 py-2.5 text-sm text-foreground placeholder:text-muted-foreground outline-none focus:ring-2 focus:ring-primary focus:border-primary transition-all"
               />
             </div>
 
@@ -66,8 +82,10 @@ export default function Login() {
               <label className="text-sm font-medium text-foreground" htmlFor="password">Password</label>
               <input
                 id="password" type="password" required
+                autoComplete={isSignUp ? "new-password" : "current-password"}
                 value={password} onChange={e => setPassword(e.target.value)}
-                className="w-full rounded-lg border border-border bg-input px-3 py-2.5 text-sm text-foreground outline-none focus:ring-2 focus:ring-primary"
+                placeholder="••••••••"
+                className="w-full rounded-lg border border-border bg-input px-3 py-2.5 text-sm text-foreground placeholder:text-muted-foreground outline-none focus:ring-2 focus:ring-primary focus:border-primary transition-all"
               />
             </div>
 
@@ -76,13 +94,13 @@ export default function Login() {
 
             <button
               type="submit" disabled={loading}
-              className="w-full rounded-lg bg-primary text-primary-foreground py-2.5 text-sm font-semibold hover:bg-primary/90 transition-all shadow-md disabled:opacity-50 mt-2"
+              className="w-full rounded-lg bg-primary text-primary-foreground py-2.5 text-sm font-semibold hover:bg-primary/90 transition-all shadow-md shadow-primary/20 disabled:opacity-50 mt-2"
             >
               {loading ? "Please wait…" : isSignUp ? "Create Account" : "Sign In"}
             </button>
           </form>
 
-          {/* THE GOOGLE BUTTON SECTION */}
+          {/* Google Login Section */}
           <div className="relative my-6">
             <div className="absolute inset-0 flex items-center">
               <span className="w-full border-t border-border"></span>
