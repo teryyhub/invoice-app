@@ -62,6 +62,37 @@ export function AuthProvider({ children }) {
     return data;
   };
 
+  // --- Password Reset ---
+  const requestPasswordReset = async (email) => {
+    const { error } = await supabase.auth.resetPasswordForEmail(email, {
+      redirectTo: `${window.location.origin}/reset-password`,
+    });
+    if (error) {
+      console.error("Reset email error:", error.message, error.status);
+      throw error;
+    }
+    return true;
+  };
+
+  return (
+    <AuthContext.Provider 
+      value={{ 
+        user, 
+        loading, 
+        isLoadingAuth: loading, 
+        signIn, 
+        signUp, 
+        signOut, 
+        signInWithGoogle, 
+        verifyOtp,
+        requestPasswordReset, // 👈 added
+      }}
+    >
+      {children}
+    </AuthContext.Provider>
+  );
+
+  
   return (
     <AuthContext.Provider 
       value={{ 

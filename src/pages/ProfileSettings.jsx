@@ -10,7 +10,7 @@ import { User, Mail, Lock, Save, Camera, ShieldCheck, Sun, Moon } from 'lucide-r
 import { toast } from 'sonner';
 
 export default function ProfileSettings() {
-  const { user } = useAuth();
+  const { user, requestPasswordReset } = useAuth();
   const { theme, toggleTheme } = useTheme(); 
   const [isLoading, setIsLoading] = useState(false);
   const [tfaEnabled, setTfaEnabled] = useState(false);
@@ -28,9 +28,17 @@ export default function ProfileSettings() {
     setIsLoading(false);
   };
 
-  const handlePasswordRequest = async () => {
-    toast.info("A password reset link has been sent to your email address.");
-  };
+ const handlePasswordRequest = async () => {
+  console.log("user:", user);
+  console.log("email:", user?.email);
+  try {
+    await requestPasswordReset(user.email);
+    toast.success("Password reset link sent to your email!");
+  } catch (err) {
+    console.error("caught error:", err);
+    toast.error("Failed to send reset email.");
+  }
+};
 
   const handleTfaToggle = () => {
     const newState = !tfaEnabled;

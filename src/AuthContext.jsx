@@ -1,84 +1,64 @@
-import { createContext, useContext, useEffect, useState } from "react";
-import { supabase } from "./api/supabaseClient";
-// Import your query client instance to clear the cache
-import { queryClientInstance } from "./lib/query-client"; 
+// Inside AuthProvider in AuthContext.jsx
 
-const AuthContext = createContext(null);
+// 1. Password Reset (Real Supabase API)
+const requestPasswordReset = async (email) => {
+  const { error } = await supabase.auth.resetPasswordForEmail(email, {
+    redirectTo: `${window.location.origin}/reset-password`,
+  });
+  if (error) {
+    console.error("Reset email error:", error.message, error.status); // 👈 added
+    throw error;
+  }
+  return true;
+};
 
-export function AuthProvider({ children }) {
-  const [user, setUser] = useState(null);
-  const [loading, setLoading] = useState(true);
-
-  useEffect(() => {
-    supabase.auth.getSession().then(({ data: { session } }) => {
-      setUser(session?.user ?? null);
-      setLoading(false);
-    });
-
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
-      setUser(session?.user ?? null);
+// 2. TFA Verification Logic
+const verifyTfaPin = async (pin) => {
+  // In a real app, you'd call an Edge Function to verify the TOTP
+  // For this implementation, we simulate the check against the stored secret
+  if (pin === "123456") { // Replace with actual TOTP validation logic
+    const { data: { user } } = await supabase.auth.getUser();
+    
+    // Update last verification date to today
+    await supabase
+      .from('profiles')
+      .update({ last_tfa_verified: new Date().toISOString(), failed_tfa_attempts: 0 })
+      .eq('id', user.id);
       
-      // If the event is SIGNED_OUT, clear the query cache immediately
-      if (_event === 'SIGNED_OUT') {
-        queryClientInstance.clear();
-      }
-    });
+    return { success: true };
+  } else {
+    // Increment failure count in DB
+    const { data: { user } } = await supabase.auth.getUser();
+    await supabase.rpc('increment_tfa_failures', 'user_id'); // You'd create this function in SQL
+    throw new Error("Invalid PIN. Please try again.");
+  }
+};
 
-    return () => subscription.unsubscribe();
-  }, []);
+// 3. Weekly Verification Check
+const checkTfaRequirement = async () => {
+  const { data: { user } } = await supabase.auth.getUser();
+  const { data: profile } = await supabase
+    .from('profiles')
+    .select('tfa_enabled, last_tfa_verified')
+    .eq('id', user.id)
+    .single();
 
-  // --- Standard Auth Methods ---
-  const signIn = (email, password) => supabase.auth.signInWithPassword({ email, password });
-  const signUp = (email, password) => supabase.auth.signUp({ email, password });
-  
-  const signOut = async () => {
-    try {
-      await supabase.auth.signOut();
-      queryClientInstance.clear(); 
-    } catch (error) {
-      console.error("Error signing out:", error);
-    }
-  };
+  if (profile?.tfa_enabled) {
+    const lastVer = new Date(profile.last_tfa_verified);
+    const now = new Date();
+    const diffInDays = (now - lastVer) / (1000 * 60 * 60 * 24);
+    
+    if (diffInDays > 7) return true; // Must re-verify every 7 days
+  }
+  return false;
+};
 
-  // --- Google Login Method ---
-  const signInWithGoogle = async () => {
-    const { data, error } = await supabase.auth.signInWithOAuth({
-      provider: 'google',
-      options: {
-        redirectTo: window.location.origin, // Redirects back to your home page after Google login
-      },
-    });
-    if (error) throw error;
-    return data;
-  };
-
-  // --- OTP Verification Method ---
-  const verifyOtp = async (email, token) => {
-    const { data, error } = await supabase.auth.verifyOTP({
-      email,
-      token,
-      type: 'signup', // Ensures it's used for a new account verification
-    });
-    if (error) throw error;
-    return data;
-  };
-
-  return (
-    <AuthContext.Provider 
-      value={{ 
-        user, 
-        loading: setLoading, // Keep internal setter
-        isLoadingAuth: loading, // Alias for App.jsx compatibility
-        signIn, 
-        signUp, 
-        signOut, 
-        signInWithGoogle, 
-        verifyOtp 
-      }}
-    >
-      {children}
-    </AuthContext.Provider>
-  );
-}
-
-export const useAuth = () => useContext(AuthContext);
+// Add these to your return value in AuthContext
+return (
+  <AuthContext.Provider value={{ 
+    user, loading, signIn, signUp, signOut, 
+    requestPasswordReset, verifyTfaPin, checkTfaRequirement 
+  }}>
+    {children}
+  </AuthContext.Provider>
+);

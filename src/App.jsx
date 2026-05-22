@@ -18,12 +18,14 @@ import Customers from "./pages/Customers";
 import ProfileSettings from "./pages/ProfileSettings";
 import Statistics from "./pages/Statistics";
 import Login from "./pages/Login";
-import VerifyOtp from "./pages/VerifyOtp"; // 1. Import the VerifyOtp page
+import VerifyOtp from "./pages/VerifyOtp";
+import TfaSetup from "./pages/TfaSetup";       // added
+import TfaChallenge from "./pages/TfaChallenge"; // added
+import ResetPassword from "./pages/ResetPassword";
 
 const AuthenticatedApp = () => {
   const { isLoadingAuth, user } = useAuth();
 
-  // Still checking session — show spinner
   if (isLoadingAuth) {
     return (
       <div className="fixed inset-0 flex items-center justify-center">
@@ -32,7 +34,6 @@ const AuthenticatedApp = () => {
     );
   }
 
-  // Not logged in — go to login
   if (!user) return <Navigate to="/login" replace />;
 
   return (
@@ -60,10 +61,13 @@ function App() {
         <QueryClientProvider client={queryClientInstance}>
           <Router>
             <Routes>
-              {/* Public Routes (Accessible without being logged in) */}
+              {/* Public Routes */}
               <Route path="/login" element={<Login />} />
-              <Route path="/verify" element={<VerifyOtp />} /> {/* 2. Add the Verify route here */}
-              
+              <Route path="/verify" element={<VerifyOtp />} />
+              <Route path="/tfa-setup" element={<TfaSetup />} />         {/* added */}
+              <Route path="/tfa-challenge" element={<TfaChallenge />} /> {/* added */}
+              <Route path="/reset-password" element={<ResetPassword />} />
+
               {/* Protected Routes */}
               <Route path="/*" element={<AuthenticatedApp />} />
             </Routes>
