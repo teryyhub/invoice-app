@@ -20,23 +20,30 @@ const INVOICE_NATURAL_WIDTH = 794;
 
 export default function InvoiceView() {
   const { id: invoiceId } = useParams();
-  const invoiceRef    = useRef(null); // unscaled — used for download capture
-  const scaleWrapRef  = useRef(null); // the element we apply CSS transform to
-  const viewportRef   = useRef(null); // outer scrollable container
-  const navigate      = useNavigate();
-  const queryClient   = useQueryClient();
+  const invoiceRef   = useRef(null); // unscaled — used for download capture
+  const scaleWrapRef = useRef(null); // the element we apply CSS transform to
+  const viewportRef  = useRef(null); // outer scrollable container
+  const navigate     = useNavigate();
+  const queryClient  = useQueryClient();
 
-  const [stampScale, setStampScale]   = useState(1);
-  const [zoom, setZoom]               = useState(1);
-  const [invoiceHeight, setInvoiceHeight] = useState(0); // natural height of rendered invoice
-  const [isCapturing, setIsCapturing] = useState(false);
+  const [stampScale, setStampScale] = useState(1);
+  const [zoom, setZoom]             = useState(1);
+  const [invoiceHeight, setInvoiceHeight] = useState(0);
+  const [isCapturing, setIsCapturing]     = useState(false);
 
-  // Measure the natural invoice height after render so we can size the layout wrapper
+  // Measure the natural invoice height after render so we can size the layout wrapper.
+  // Empty deps: ResizeObserver handles re-measurement whenever content changes.
   useEffect(() => {
     if (!invoiceRef.current) return;
-    const ro = new ResizeObserver(() => {
-      setInvoiceHeight(invoiceRef.current?.scrollHeight ?? 0);
-    });
+
+    const measure = () => {
+      const el = invoiceRef.current;
+      if (el) setInvoiceHeight(el.offsetHeight);
+    };
+
+    measure();
+
+    const ro = new ResizeObserver(measure);
     ro.observe(invoiceRef.current);
     return () => ro.disconnect();
   }, []);
@@ -94,7 +101,7 @@ export default function InvoiceView() {
       if (cs.overflow !== "visible" || cs.overflowX !== "visible" || cs.overflowY !== "visible") {
         saved.push({
           node,
-          overflow: node.style.overflow,
+          overflow:  node.style.overflow,
           overflowX: node.style.overflowX,
           overflowY: node.style.overflowY,
         });
@@ -105,7 +112,7 @@ export default function InvoiceView() {
       node = node.parentElement;
     }
 
-    // Also temporarily reset the CSS transform so capture is at 1:1
+    // Temporarily reset the CSS transform so capture is at 1:1
     const scaleEl = scaleWrapRef.current;
     const prevTransform = scaleEl?.style.transform ?? "";
     if (scaleEl) scaleEl.style.transform = "none";
@@ -116,9 +123,9 @@ export default function InvoiceView() {
       allowTaint: true,
       scrollX: 0,
       scrollY: 0,
-      width:        el.scrollWidth,
-      height:       el.scrollHeight,
-      windowWidth:  el.scrollWidth,
+      width:       el.scrollWidth,
+      height:      el.scrollHeight,
+      windowWidth: el.scrollWidth,
       windowHeight: el.scrollHeight,
       ...options,
     });
@@ -138,10 +145,10 @@ export default function InvoiceView() {
     if (!invoiceRef.current) return;
     setIsCapturing(true);
     try {
-      const canvas   = await captureFullInvoice();
-      const imgData  = canvas.toDataURL("image/png");
-      const pdf      = new jspdf("p", "mm", "a4");
-      const pdfWidth = pdf.internal.pageSize.getWidth();
+      const canvas    = await captureFullInvoice();
+      const imgData   = canvas.toDataURL("image/png");
+      const pdf       = new jspdf("p", "mm", "a4");
+      const pdfWidth  = pdf.internal.pageSize.getWidth();
       const pdfHeight = (canvas.height * pdfWidth) / canvas.width;
       pdf.addImage(imgData, "PNG", 0, 0, pdfWidth, pdfHeight);
       pdf.save(`${invoice?.invoice_number || "invoice"}.pdf`);
@@ -193,9 +200,8 @@ export default function InvoiceView() {
       </div>
     );
 
-  // Scaled dimensions used for the layout placeholder
-  const scaledWidth  = INVOICE_NATURAL_WIDTH * zoom;
-  const scaledHeight = invoiceHeight * zoom;
+  // Scaled width for the layout placeholder (height grows naturally)
+  const scaledWidth = INVOICE_NATURAL_WIDTH * zoom;
 
   return (
     <div className="space-y-4">
@@ -262,8 +268,12 @@ export default function InvoiceView() {
               </AlertDialogHeader>
               <AlertDialogFooter>
                 <AlertDialogCancel>Cancel</AlertDialogCancel>
-                <AlertDialogAction onClick={() => deleteMutation.mutate()}
-                  className="bg-destructive hover:bg-destructive/90">Delete</AlertDialogAction>
+                <AlertDialogAction
+                  onClick={() => deleteMutation.mutate()}
+                  className="bg-destructive hover:bg-destructive/90"
+                >
+                  Delete
+                </AlertDialogAction>
               </AlertDialogFooter>
             </AlertDialogContent>
           </AlertDialog>
@@ -272,7 +282,7 @@ export default function InvoiceView() {
 
       {/*
         ── Viewport ──
-        Scrollable only when zoom makes the invoice larger than the screen.
+        Scrollable only when zoom makes the invoice wider than the screen.
         Centers the invoice horizontally when there is surplus space.
       */}
       <div
@@ -281,29 +291,27 @@ export default function InvoiceView() {
         style={{ padding: "16px 16px 24px" }}
       >
         {/*
-          Layout placeholder — occupies the scaled dimensions so the page
-          scrolls correctly. The actual invoice is transformed inside it.
+          Layout placeholder — only constrains width; height grows naturally
+          with the content so nothing gets clipped.
         */}
         <div
           style={{
-            width:   scaledWidth,
-            height:  scaledHeight || "auto",
-            margin:  "0 auto",        // centers horizontally on wide screens
-            position: "relative",
+            width:    scaledWidth,
+            minWidth: scaledWidth,
+            margin:   "0 auto",
           }}
         >
           {/*
             Scale wrapper: CSS transform scales the invoice visually.
-            transform-origin: top left keeps math predictable.
+            position: relative (NOT absolute) keeps it in normal document flow
+            so the parent expands to contain the full invoice height.
+            transform-origin: top left keeps the math predictable.
             The invoiceRef element inside is always at natural 1:1 size —
             html2canvas resets this transform before capture.
           */}
           <div
             ref={scaleWrapRef}
             style={{
-              position:        "absolute",
-              top:             0,
-              left:            0,
               width:           INVOICE_NATURAL_WIDTH,
               transformOrigin: "top left",
               transform:       `scale(${zoom})`,

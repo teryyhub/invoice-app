@@ -20,6 +20,14 @@ function withTimeout(promise, ms, fallback) {
   ]);
 }
 
+function isRecoveryFlow() {
+  return (
+    window.location.hash.includes("type=recovery") ||
+    window.location.pathname === "/reset-password" ||
+    window.location.pathname === "/admin-callback"   // ← added
+  );
+}
+
 export function AuthProvider({ children }) {
   const [user, setUser]               = useState(null);
   const [loading, setLoading]         = useState(true);
@@ -70,10 +78,7 @@ export function AuthProvider({ children }) {
     supabase.auth.getSession().then(async ({ data: { session } }) => {
       const currentUser = session?.user ?? null;
       setUser(currentUser);
-      // Don't check TFA if we're in a password recovery flow
-      const isRecovery = window.location.hash.includes("type=recovery") ||
-        window.location.pathname === "/reset-password";
-      if (currentUser && !isRecovery) {
+      if (currentUser && !isRecoveryFlow()) {
         await checkTfaRequirement(currentUser.id);
       }
       setLoading(false);
@@ -84,13 +89,10 @@ export function AuthProvider({ children }) {
         const currentUser = session?.user ?? null;
         setUser(currentUser);
 
-        // PASSWORD_RECOVERY: just set user, let ResetPassword page handle everything
         if (_event === "PASSWORD_RECOVERY") return;
 
         if (_event === "SIGNED_IN" && currentUser) {
-          // Don't check TFA if landing on reset-password page
-          const isRecovery = window.location.pathname === "/reset-password";
-          if (!isRecovery) await checkTfaRequirement(currentUser.id);
+          if (!isRecoveryFlow()) await checkTfaRequirement(currentUser.id);
         }
 
         if (_event === "SIGNED_OUT") {
@@ -145,7 +147,7 @@ export function AuthProvider({ children }) {
       .update({
         tfa_enabled: true,
         pin_hash: hash,
-        last_tfa_verified: null, // null so modal fires on next login
+        last_tfa_verified: null,
         failed_tfa_attempts: 0,
         pin_locked_until: null,
       })
