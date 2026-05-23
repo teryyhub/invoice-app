@@ -4,7 +4,6 @@ import { queryClientInstance } from "@/lib/query-client";
 import { BrowserRouter as Router, Route, Routes, Navigate } from "react-router-dom";
 import PageNotFound from "./lib/PageNotFound";
 import { AuthProvider, useAuth } from "@/lib/AuthContext";
-import UserNotRegisteredError from "@/components/UserNotRegisteredError";
 import { ThemeProvider } from "@/lib/ThemeProvider";
 
 import AppLayout from "./components/layout/AppLayout";
@@ -19,16 +18,17 @@ import ProfileSettings from "./pages/ProfileSettings";
 import Statistics from "./pages/Statistics";
 import Login from "./pages/Login";
 import VerifyOtp from "./pages/VerifyOtp";
-import TfaSetup from "./pages/TfaSetup";       // added
-import TfaChallenge from "./pages/TfaChallenge"; // added
 import ResetPassword from "./pages/ResetPassword";
+// NOTE: Removed TfaSetup / TfaChallenge imports — 2FA is now handled inline
+// via TfaVerifyModal inside AppLayout. Delete those route entries if the
+// page files don't exist, or keep them if you have the files.
 
 const AuthenticatedApp = () => {
   const { isLoadingAuth, user } = useAuth();
 
   if (isLoadingAuth) {
     return (
-      <div className="fixed inset-0 flex items-center justify-center">
+      <div className="fixed inset-0 flex items-center justify-center bg-background">
         <div className="w-8 h-8 border-4 border-slate-200 border-t-slate-800 rounded-full animate-spin" />
       </div>
     );
@@ -39,17 +39,17 @@ const AuthenticatedApp = () => {
   return (
     <Routes>
       <Route element={<AppLayout />}>
-        <Route path="/" element={<Dashboard />} />
-        <Route path="/generate" element={<GenerateInvoice />} />
-        <Route path="/invoices" element={<InvoiceList />} />
-        <Route path="/settings" element={<VendorSettings />} />
-        <Route path="/reports" element={<Reports />} />
-        <Route path="/customers" element={<Customers />} />
-        <Route path="/profile" element={<ProfileSettings />} />
+        <Route path="/"           element={<Dashboard />} />
+        <Route path="/generate"   element={<GenerateInvoice />} />
+        <Route path="/invoices"   element={<InvoiceList />} />
+        <Route path="/settings"   element={<VendorSettings />} />
+        <Route path="/reports"    element={<Reports />} />
+        <Route path="/customers"  element={<Customers />} />
+        <Route path="/profile"    element={<ProfileSettings />} />
         <Route path="/statistics" element={<Statistics />} />
       </Route>
       <Route path="/invoice/:id" element={<InvoiceView />} />
-      <Route path="*" element={<PageNotFound />} />
+      <Route path="*"            element={<PageNotFound />} />
     </Routes>
   );
 };
@@ -61,15 +61,10 @@ function App() {
         <QueryClientProvider client={queryClientInstance}>
           <Router>
             <Routes>
-              {/* Public Routes */}
-              <Route path="/login" element={<Login />} />
-              <Route path="/verify" element={<VerifyOtp />} />
-              <Route path="/tfa-setup" element={<TfaSetup />} />         {/* added */}
-              <Route path="/tfa-challenge" element={<TfaChallenge />} /> {/* added */}
+              <Route path="/login"          element={<Login />} />
+              <Route path="/verify"         element={<VerifyOtp />} />
               <Route path="/reset-password" element={<ResetPassword />} />
-
-              {/* Protected Routes */}
-              <Route path="/*" element={<AuthenticatedApp />} />
+              <Route path="/*"              element={<AuthenticatedApp />} />
             </Routes>
           </Router>
           <Toaster richColors />

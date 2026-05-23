@@ -1,193 +1,236 @@
-import React, { useState } from 'react';
-import { useAuth } from '@/lib/AuthContext';
-import { useTheme } from '@/lib/ThemeProvider'; 
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
-import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label';
-import { Button } from '@/components/ui/button';
-import { Switch } from '@/components/ui/switch'; 
-import { User, Mail, Lock, Save, Camera, ShieldCheck, Sun, Moon } from 'lucide-react';
-import { toast } from 'sonner';
+import { useState, useEffect } from "react";
+import { useAuth } from "@/lib/AuthContext";
+import { ShieldCheck, ShieldOff, Lock, KeyRound, AlertTriangle } from "lucide-react";
+import { toast } from "sonner";
+
+// Defined OUTSIDE component so React doesn't remount it on every render
+const PinInput = ({ value, onChange, placeholder = "••••••" }) => (
+  <div className="relative">
+    <Lock className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
+    <input
+      type="password"
+      inputMode="numeric"
+      maxLength={6}
+      value={value}
+      autoComplete="off"
+      onChange={(e) => {
+        const v = e.target.value.replace(/\D/g, "");
+        if (v.length <= 6) onChange(v);
+      }}
+      placeholder={placeholder}
+      className="w-full pl-10 pr-4 py-2.5 border border-gray-300 rounded-lg text-center text-xl tracking-[0.5em] focus:outline-none focus:ring-2 focus:ring-indigo-500"
+    />
+  </div>
+);
 
 export default function ProfileSettings() {
-  const { user, requestPasswordReset } = useAuth();
-  const { theme, toggleTheme } = useTheme(); 
-  const [isLoading, setIsLoading] = useState(false);
-  const [tfaEnabled, setTfaEnabled] = useState(false);
-  
-  const [form, setForm] = useState({
-    fullName: user?.full_name || '',
-    email: user?.email || '',
-  });
+  const {
+    user,
+    tfaProfile,
+    loadTfaProfile,
+    setupTfaPin,
+    verifyTfaPin,
+    disableTfa,
+    requestPasswordReset,
+  } = useAuth();
 
-  const handleSaveProfile = async (e) => {
+  const [mode, setMode]             = useState(null); // null | 'setup' | 'disable'
+  const [pin, setPin]               = useState("");
+  const [confirmPin, setConfirmPin] = useState("");
+  const [loading, setLoading]       = useState(false);
+  const [error, setError]           = useState("");
+
+  useEffect(() => {
+    if (user?.id) loadTfaProfile(user.id);
+  }, [user?.id]);
+
+  const tfaEnabled   = tfaProfile?.tfa_enabled ?? false;
+  const isLocked     = tfaProfile?.pin_locked_until &&
+    Date.now() < new Date(tfaProfile.pin_locked_until).getTime();
+  const attemptsLeft = isLocked
+    ? 0
+    : Math.max(0, 5 - (tfaProfile?.failed_tfa_attempts ?? 0));
+  const lastVerified = tfaProfile?.last_tfa_verified
+    ? new Date(tfaProfile.last_tfa_verified).toLocaleDateString(undefined, {
+        year: "numeric", month: "short", day: "numeric",
+      })
+    : "Never";
+
+  const resetForm = () => { setPin(""); setConfirmPin(""); setError(""); setMode(null); };
+
+  const handleSetupSubmit = async (e) => {
     e.preventDefault();
-    setIsLoading(true);
-    await new Promise(resolve => setTimeout(resolve, 800));
-    toast.success("Profile information updated!");
-    setIsLoading(false);
+    if (!/^\d{6}$/.test(pin))  { setError("PIN must be exactly 6 digits."); return; }
+    if (pin !== confirmPin)     { setError("PINs do not match."); return; }
+    setLoading(true); setError("");
+    try {
+      await setupTfaPin(pin);
+      toast.success("2FA enabled! PIN saved securely.");
+      resetForm();
+    } catch (err) { setError(err.message); }
+    finally { setLoading(false); }
   };
 
- const handlePasswordRequest = async () => {
-  console.log("user:", user);
-  console.log("email:", user?.email);
-  try {
-    await requestPasswordReset(user.email);
-    toast.success("Password reset link sent to your email!");
-  } catch (err) {
-    console.error("caught error:", err);
-    toast.error("Failed to send reset email.");
-  }
-};
+  const handleDisableSubmit = async (e) => {
+    e.preventDefault();
+    if (!/^\d{6}$/.test(pin)) { setError("Enter your current 6-digit PIN."); return; }
+    setLoading(true); setError("");
+    try {
+      await verifyTfaPin(pin);
+      await disableTfa();
+      toast.success("2FA has been disabled.");
+      resetForm();
+    } catch (err) { setError(err.message); }
+    finally { setLoading(false); }
+  };
 
-  const handleTfaToggle = () => {
-    const newState = !tfaEnabled;
-    setTfaEnabled(newState);
-    toast.success(newState ? "TFA Enabled! Please check your email for setup." : "TFA Disabled.");
+  const handlePasswordRequest = async () => {
+    try {
+      await requestPasswordReset(user.email);
+      toast.success("Password reset link sent to your email!");
+    } catch { toast.error("Failed to send reset email."); }
   };
 
   return (
-    <div className="max-w-4xl mx-auto space-y-6 pb-10">
-      <div className="flex items-center justify-between">
-        <div className="space-y-1">
-          <h1 className="text-2xl font-bold text-foreground">Account Settings</h1>
-          <p className="text-muted-foreground mt-1">Manage your account, security and appearance</p>
+    <div className="max-w-2xl mx-auto p-6 space-y-8">
+      <h1 className="text-2xl font-bold text-gray-800">Security Settings</h1>
+
+      {/* Status card */}
+      <div className={`rounded-xl border-2 p-5 ${tfaEnabled ? "border-green-400 bg-green-50" : "border-gray-200 bg-gray-50"}`}>
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-3">
+            {tfaEnabled
+              ? <ShieldCheck className="w-6 h-6 text-green-600" />
+              : <ShieldOff className="w-6 h-6 text-gray-400" />}
+            <div>
+              <p className="font-semibold text-gray-800">Two-Factor Authentication</p>
+              <p className="text-sm text-gray-500">
+                {tfaEnabled
+                  ? `Active · Last verified: ${lastVerified}`
+                  : "Not enabled · Your account has no extra protection"}
+              </p>
+            </div>
+          </div>
+          <span className={`px-3 py-1 rounded-full text-xs font-bold ${tfaEnabled ? "bg-green-200 text-green-800" : "bg-gray-200 text-gray-500"}`}>
+            {tfaEnabled ? "ON" : "OFF"}
+          </span>
         </div>
+        {isLocked && (
+          <div className="mt-3 flex items-center gap-2 text-sm text-red-600 bg-red-50 border border-red-200 rounded-lg px-3 py-2">
+            <AlertTriangle className="w-4 h-4 shrink-0" />
+            PIN locked due to too many failed attempts. Try again after 15 minutes.
+          </div>
+        )}
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-        <div className="space-y-6">
-          <Card className="overflow-hidden">
-            <div className="h-20 bg-primary/10 w-full" />
-            <CardContent className="p-6 flex flex-col items-center text-center -mt-12">
-              <div className="relative group">
-                <div className="w-24 h-24 rounded-full bg-background border-4 border-card flex items-center justify-center overflow-hidden shadow-sm">
-                  <User className="w-12 h-12 text-muted-foreground" />
-                </div>
-                <button className="absolute bottom-0 right-0 p-2 bg-primary text-primary-foreground rounded-full shadow-lg hover:scale-110 transition-transform">
-                  <Camera className="w-4 h-4" />
-                </button>
-              </div>
-              <div className="mt-4">
-                <h3 className="font-bold text-lg truncate max-w-xs">{user?.email || 'User Name'}</h3>
-                <p className="text-xs text-muted-foreground uppercase tracking-wider font-medium">Member</p>
-              </div>
-            </CardContent>
-          </Card>
-
-          <Card>
-            <CardHeader className="py-4">
-              <CardTitle className="text-sm font-medium flex items-center gap-2">
-                <ShieldCheck className="w-4 h-4 text-primary" /> Security Status
-              </CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-3 pb-6">
-              <div className="flex justify-between items-center text-xs">
-                <span className="text-muted-foreground">Email Verified</span>
-                <span className="text-green-600 font-bold px-2 py-0.5 bg-green-100 dark:bg-green-900/30 rounded-full">Yes</span>
-              </div>
-              <div className="flex justify-between items-center text-xs">
-                <span className="text-muted-foreground">Two-Factor Auth</span>
-                <span className={`font-bold px-2 py-0.5 rounded-full ${tfaEnabled ? 'text-green-600 bg-green-100 dark:bg-green-900/30' : 'text-amber-600 bg-amber-100 dark:bg-amber-900/30'}`}>
-                  {tfaEnabled ? 'Enabled' : 'Disabled'}
-                </span>
-              </div>
-            </CardContent>
-          </Card>
+      {/* Action buttons */}
+      {mode === null && (
+        <div className="flex gap-3">
+          {!tfaEnabled ? (
+            <button onClick={() => setMode("setup")}
+              className="flex items-center gap-2 bg-indigo-600 text-white px-5 py-2.5 rounded-lg font-medium hover:bg-indigo-700 transition">
+              <KeyRound className="w-4 h-4" /> Enable 2FA
+            </button>
+          ) : (
+            <>
+              <button onClick={() => setMode("setup")}
+                className="flex items-center gap-2 bg-indigo-600 text-white px-5 py-2.5 rounded-lg font-medium hover:bg-indigo-700 transition">
+                <KeyRound className="w-4 h-4" /> Change PIN
+              </button>
+              <button onClick={() => setMode("disable")}
+                className="flex items-center gap-2 border border-red-300 text-red-600 px-5 py-2.5 rounded-lg font-medium hover:bg-red-50 transition">
+                <ShieldOff className="w-4 h-4" /> Disable 2FA
+              </button>
+            </>
+          )}
         </div>
+      )}
 
-        <div className="md:col-span-2 space-y-6">
-          <Card>
-            <CardHeader>
-              <CardTitle className="text-lg">Personal Information</CardTitle>
-              <CardDescription>Update your basic account details</CardDescription>
-            </CardHeader>
-            <CardContent>
-              <form onSubmit={handleSaveProfile} className="space-y-4">
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  <div className="space-y-2">
-                    <Label htmlFor="fullName">Full Name</Label>
-                    <div className="relative">
-                      <User className="absolute left-3 top-3 w-4 h-4 text-muted-foreground" />
-                      <Input 
-                        id="fullName" 
-                        className="pl-9" 
-                        value={form.fullName} 
-                        onChange={e => setForm({...form, fullName: e.target.value})} 
-                        placeholder="Enter your full name"
-                      />
-                    </div>
-                  </div>
-                  <div className="space-y-2">
-                    <Label htmlFor="email">Email Address</Label>
-                    <div className="relative">
-                      <Mail className="absolute left-3 top-3 w-4 h-4 text-muted-foreground" />
-                      <Input 
-                        id="email" 
-                        className="pl-9" 
-                        value={form.email} 
-                        disabled 
-                        placeholder="email@example.com"
-                      />
-                    </div>
-                  </div>
-                </div>
-                <div className="flex justify-end pt-2">
-                  <Button type="submit" disabled={isLoading} className="gap-2">
-                    {isLoading ? <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" /> : <Save className="w-4 h-4" />}
-                    Save Changes
-                  </Button>
-                </div>
-              </form>
-            </CardContent>
-          </Card>
+      {/* Setup / Change PIN */}
+      {mode === "setup" && (
+        <form onSubmit={handleSetupSubmit} className="bg-white border rounded-xl p-5 space-y-4 shadow-sm">
+          <h2 className="font-semibold text-gray-800 flex items-center gap-2">
+            <KeyRound className="w-4 h-4 text-indigo-600" />
+            {tfaEnabled ? "Change Your PIN" : "Set Up 2FA PIN"}
+          </h2>
+          <p className="text-sm text-gray-500">
+            Choose a 6-digit numeric PIN. You'll need this on login and every 7 days for re-verification.
+          </p>
+          <div className="space-y-1">
+            <label className="text-sm font-medium text-gray-700">New PIN</label>
+            <PinInput value={pin} onChange={setPin} />
+          </div>
+          <div className="space-y-1">
+            <label className="text-sm font-medium text-gray-700">Confirm PIN</label>
+            <PinInput value={confirmPin} onChange={setConfirmPin} />
+          </div>
+          {error && (
+            <p className="text-sm text-red-600 flex items-center gap-1">
+              <AlertTriangle className="w-4 h-4 shrink-0" /> {error}
+            </p>
+          )}
+          <div className="flex gap-3 pt-1">
+            <button type="submit"
+              disabled={loading || pin.length !== 6 || confirmPin.length !== 6}
+              className="flex-1 bg-indigo-600 text-white py-2.5 rounded-lg font-medium hover:bg-indigo-700 transition disabled:opacity-50">
+              {loading ? "Saving…" : tfaEnabled ? "Update PIN" : "Enable 2FA"}
+            </button>
+            <button type="button" onClick={resetForm}
+              className="flex-1 bg-gray-100 text-gray-700 py-2.5 rounded-lg font-medium hover:bg-gray-200 transition">
+              Cancel
+            </button>
+          </div>
+        </form>
+      )}
 
-          <Card>
-            <CardHeader>
-              <CardTitle className="text-lg">Security & Access</CardTitle>
-              <CardDescription>Manage password and multi-factor authentication</CardDescription>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              <div className="flex items-center justify-between p-4 rounded-xl border border-border bg-card hover:bg-accent/50 transition-colors cursor-pointer" onClick={handleTfaToggle}>
-                <div className="space-y-0.5">
-                  <Label className="text-base font-semibold">Two-Factor Authentication</Label>
-                  <p className="text-xs text-muted-foreground">Add an extra layer of security to your account.</p>
-                </div>
-                <Switch checked={tfaEnabled} />
-              </div>
+      {/* Disable 2FA */}
+      {mode === "disable" && (
+        <form onSubmit={handleDisableSubmit} className="bg-white border border-red-200 rounded-xl p-5 space-y-4 shadow-sm">
+          <h2 className="font-semibold text-red-700 flex items-center gap-2">
+            <ShieldOff className="w-4 h-4" /> Disable Two-Factor Authentication
+          </h2>
+          <p className="text-sm text-gray-500">
+            Enter your current PIN to confirm removal of 2FA.
+          </p>
+          <div className="space-y-1">
+            <label className="text-sm font-medium text-gray-700">Current PIN</label>
+            <PinInput value={pin} onChange={setPin} />
+          </div>
+          {!isLocked && attemptsLeft < 5 && attemptsLeft > 0 && (
+            <p className="text-xs text-amber-600">
+              {attemptsLeft} attempt{attemptsLeft !== 1 ? "s" : ""} remaining before lockout.
+            </p>
+          )}
+          {error && (
+            <p className="text-sm text-red-600 flex items-center gap-1">
+              <AlertTriangle className="w-4 h-4 shrink-0" /> {error}
+            </p>
+          )}
+          <div className="flex gap-3 pt-1">
+            <button type="submit"
+              disabled={loading || pin.length !== 6 || isLocked}
+              className="flex-1 bg-red-600 text-white py-2.5 rounded-lg font-medium hover:bg-red-700 transition disabled:opacity-50">
+              {loading ? "Verifying…" : "Confirm & Disable"}
+            </button>
+            <button type="button" onClick={resetForm}
+              className="flex-1 bg-gray-100 text-gray-700 py-2.5 rounded-lg font-medium hover:bg-gray-200 transition">
+              Cancel
+            </button>
+          </div>
+        </form>
+      )}
 
-              <div className="flex items-center justify-between p-4 rounded-xl border border-border bg-card hover:bg-accent/50 transition-colors">
-                <div className="space-y-0.5">
-                  <Label className="text-base font-semibold">Password Change</Label>
-                  <p className="text-xs text-muted-foreground">Change your password via email verification.</p>
-                </div>
-                <Button variant="outline" size="sm" className="gap-2" onClick={handlePasswordRequest}>
-                  <Lock className="w-4 h-4" /> Update Password
-                </Button>
-              </div>
-            </CardContent>
-          </Card>
-
-          <Card>
-            <CardHeader>
-              <CardTitle className="text-lg">Appearance</CardTitle>
-              <CardDescription>Customize how the application looks</CardDescription>
-            </CardHeader>
-            <CardContent>
-              <div className="flex items-center justify-between p-4 rounded-xl border border-border bg-card hover:bg-accent/50 transition-colors cursor-pointer" onClick={toggleTheme}>
-                <div className="flex items-center gap-3">
-                  <div className="p-2 rounded-lg bg-primary/10 text-primary">
-                    {theme === 'light' ? <Sun className="w-5 h-5" /> : <Moon className="w-5 h-5" />}
-                  </div>
-                  <div className="space-y-0.5">
-                    <Label className="text-base font-semibold">Dark Mode</Label>
-                    <p className="text-xs text-muted-foreground">Switch between light and dark themes</p>
-                  </div>
-                </div>
-                <Switch checked={theme === 'dark'} />
-              </div>
-            </CardContent>
-          </Card>
+      {/* Primary credentials */}
+      <div className="border-t pt-6">
+        <h2 className="text-lg font-semibold text-gray-800 mb-3">Primary Credentials</h2>
+        <div className="flex justify-between items-center p-4 bg-gray-50 border rounded-lg">
+          <p className="text-gray-600 text-sm">
+            Signed in as <span className="font-medium">{user?.email}</span>
+          </p>
+          <button onClick={handlePasswordRequest}
+            className="text-sm text-red-600 hover:text-red-800 font-medium">
+            Reset Password
+          </button>
         </div>
       </div>
     </div>

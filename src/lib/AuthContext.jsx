@@ -1,109 +1,218 @@
-import { createContext, useContext, useEffect, useState } from "react";
-import { supabase } from "@/api/supabaseClient"; // FIXED: Using @ alias to reach src/api
-import { queryClientInstance } from "@/lib/query-client"; // FIXED: Using @ alias to reach src/lib
+import { createContext, useContext, useEffect, useState, useRef } from "react";
+import { supabase } from "@/api/supabaseClient";
+import { queryClientInstance } from "@/lib/query-client";
 
 const AuthContext = createContext(null);
 
+async function hashPin(pin) {
+  const encoder = new TextEncoder();
+  const data = encoder.encode(pin);
+  const hashBuffer = await crypto.subtle.digest("SHA-256", data);
+  return Array.from(new Uint8Array(hashBuffer))
+    .map((b) => b.toString(16).padStart(2, "0"))
+    .join("");
+}
+
+function withTimeout(promise, ms, fallback) {
+  return Promise.race([
+    promise,
+    new Promise((resolve) => setTimeout(() => resolve(fallback), ms)),
+  ]);
+}
+
 export function AuthProvider({ children }) {
-  const [user, setUser] = useState(null);
-  const [loading, setLoading] = useState(true);
+  const [user, setUser]               = useState(null);
+  const [loading, setLoading]         = useState(true);
+  const [tfaProfile, setTfaProfile]   = useState(null);
+  const [tfaRequired, setTfaRequired] = useState(false);
+  const tfaProfileRef                 = useRef(null);
+
+  const loadTfaProfile = async (userId) => {
+    if (!userId) { setTfaProfile(null); tfaProfileRef.current = null; return null; }
+    try {
+      const result = await withTimeout(
+        supabase
+          .from("profiles")
+          .select("tfa_enabled, last_tfa_verified, failed_tfa_attempts, pin_locked_until")
+          .eq("id", userId)
+          .single(),
+        4000,
+        { data: null, error: { message: "timeout" } }
+      );
+      const { data, error } = result;
+      if (error) {
+        console.warn("loadTfaProfile:", error.message);
+        setTfaProfile(null); tfaProfileRef.current = null; return null;
+      }
+      setTfaProfile(data); tfaProfileRef.current = data; return data;
+    } catch (e) {
+      console.warn("loadTfaProfile exception:", e);
+      setTfaProfile(null); tfaProfileRef.current = null; return null;
+    }
+  };
+
+  const checkTfaRequirement = async (userId) => {
+    try {
+      const profile = await loadTfaProfile(userId);
+      if (!profile?.tfa_enabled) { setTfaRequired(false); return false; }
+      if (!profile.last_tfa_verified) { setTfaRequired(true); return true; }
+      const days = (Date.now() - new Date(profile.last_tfa_verified).getTime()) / 86400000;
+      const needed = days > 7;
+      setTfaRequired(needed);
+      return needed;
+    } catch (e) {
+      console.warn("checkTfaRequirement:", e);
+      setTfaRequired(false); return false;
+    }
+  };
 
   useEffect(() => {
-    supabase.auth.getSession().then(({ data: { session } }) => {
-      setUser(session?.user ?? null);
+    supabase.auth.getSession().then(async ({ data: { session } }) => {
+      const currentUser = session?.user ?? null;
+      setUser(currentUser);
+      // Don't check TFA if we're in a password recovery flow
+      const isRecovery = window.location.hash.includes("type=recovery") ||
+        window.location.pathname === "/reset-password";
+      if (currentUser && !isRecovery) {
+        await checkTfaRequirement(currentUser.id);
+      }
       setLoading(false);
     });
 
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
-      setUser(session?.user ?? null);
-      
-      // Clear cache on sign out to prevent 404 errors
-      if (_event === 'SIGNED_OUT') {
-        queryClientInstance.clear();
+    const { data: { subscription } } = supabase.auth.onAuthStateChange(
+      async (_event, session) => {
+        const currentUser = session?.user ?? null;
+        setUser(currentUser);
+
+        // PASSWORD_RECOVERY: just set user, let ResetPassword page handle everything
+        if (_event === "PASSWORD_RECOVERY") return;
+
+        if (_event === "SIGNED_IN" && currentUser) {
+          // Don't check TFA if landing on reset-password page
+          const isRecovery = window.location.pathname === "/reset-password";
+          if (!isRecovery) await checkTfaRequirement(currentUser.id);
+        }
+
+        if (_event === "SIGNED_OUT") {
+          queryClientInstance.clear();
+          setTfaProfile(null);
+          setTfaRequired(false);
+        }
       }
-    });
+    );
 
     return () => subscription.unsubscribe();
   }, []);
 
-  // --- Standard Auth Methods ---
-  const signIn = (email, password) => supabase.auth.signInWithPassword({ email, password });
-  const signUp = (email, password) => supabase.auth.signUp({ email, password });
-  
+  const signIn = (email, password) =>
+    supabase.auth.signInWithPassword({ email, password });
+
+  const signUp = (email, password) =>
+    supabase.auth.signUp({ email, password });
+
   const signOut = async () => {
-    try {
-      await supabase.auth.signOut();
-      queryClientInstance.clear(); 
-    } catch (error) {
-      console.error("Error signing out:", error);
-    }
+    try { await supabase.auth.signOut(); queryClientInstance.clear(); }
+    catch (e) { console.error("signOut error:", e); }
   };
 
-  // --- Google Login Method ---
   const signInWithGoogle = async () => {
     const { data, error } = await supabase.auth.signInWithOAuth({
-      provider: 'google',
-      options: {
-        redirectTo: window.location.origin, 
-      },
+      provider: "google",
+      options: { redirectTo: window.location.origin },
     });
     if (error) throw error;
     return data;
   };
 
-  // --- OTP Verification Method ---
   const verifyOtp = async (email, token) => {
-    const { data, error } = await supabase.auth.verifyOTP({
-      email,
-      token,
-      type: 'signup',
-    });
+    const { data, error } = await supabase.auth.verifyOTP({ email, token, type: "signup" });
     if (error) throw error;
     return data;
   };
 
-  // --- Password Reset ---
   const requestPasswordReset = async (email) => {
     const { error } = await supabase.auth.resetPasswordForEmail(email, {
       redirectTo: `${window.location.origin}/reset-password`,
     });
-    if (error) {
-      console.error("Reset email error:", error.message, error.status);
-      throw error;
-    }
+    if (error) throw error;
     return true;
   };
 
-  return (
-    <AuthContext.Provider 
-      value={{ 
-        user, 
-        loading, 
-        isLoadingAuth: loading, 
-        signIn, 
-        signUp, 
-        signOut, 
-        signInWithGoogle, 
-        verifyOtp,
-        requestPasswordReset, // 👈 added
-      }}
-    >
-      {children}
-    </AuthContext.Provider>
-  );
+  const setupTfaPin = async (pin) => {
+    const hash = await hashPin(pin);
+    const { error } = await supabase
+      .from("profiles")
+      .update({
+        tfa_enabled: true,
+        pin_hash: hash,
+        last_tfa_verified: null, // null so modal fires on next login
+        failed_tfa_attempts: 0,
+        pin_locked_until: null,
+      })
+      .eq("id", user.id);
+    if (error) throw new Error(error.message);
+    await loadTfaProfile(user.id);
+    setTfaRequired(false);
+  };
 
-  
+  const verifyTfaPin = async (pin) => {
+    const profile = tfaProfileRef.current;
+    if (profile?.pin_locked_until) {
+      const lockedUntil = new Date(profile.pin_locked_until);
+      if (Date.now() < lockedUntil.getTime()) {
+        const mins = Math.ceil((lockedUntil - Date.now()) / 60000);
+        throw new Error(`PIN locked. Try again in ${mins} minute${mins > 1 ? "s" : ""}.`);
+      }
+    }
+    const { data, error } = await supabase
+      .from("profiles")
+      .select("pin_hash")
+      .eq("id", user.id)
+      .single();
+    if (error || !data?.pin_hash) throw new Error("PIN not set up.");
+    const inputHash = await hashPin(pin);
+    if (inputHash !== data.pin_hash) {
+      await supabase.rpc("increment_tfa_failures", { user_id: user.id });
+      await loadTfaProfile(user.id);
+      throw new Error("Incorrect PIN. Please try again.");
+    }
+    await supabase
+      .from("profiles")
+      .update({
+        last_tfa_verified: new Date().toISOString(),
+        failed_tfa_attempts: 0,
+        pin_locked_until: null,
+      })
+      .eq("id", user.id);
+    await loadTfaProfile(user.id);
+    setTfaRequired(false);
+    return { success: true };
+  };
+
+  const disableTfa = async () => {
+    const { error } = await supabase
+      .from("profiles")
+      .update({
+        tfa_enabled: false,
+        pin_hash: null,
+        last_tfa_verified: null,
+        failed_tfa_attempts: 0,
+        pin_locked_until: null,
+      })
+      .eq("id", user.id);
+    if (error) throw new Error(error.message);
+    await loadTfaProfile(user.id);
+    setTfaRequired(false);
+  };
+
   return (
-    <AuthContext.Provider 
-      value={{ 
-        user, 
-        loading, 
-        isLoadingAuth: loading, 
-        signIn, 
-        signUp, 
-        signOut, 
-        signInWithGoogle, 
-        verifyOtp 
+    <AuthContext.Provider
+      value={{
+        user, loading, isLoadingAuth: loading,
+        tfaProfile, tfaRequired, setTfaRequired,
+        signIn, signUp, signOut, signInWithGoogle, verifyOtp,
+        requestPasswordReset, setupTfaPin, verifyTfaPin, disableTfa,
+        checkTfaRequirement, loadTfaProfile,
       }}
     >
       {children}

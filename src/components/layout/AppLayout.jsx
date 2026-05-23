@@ -1,19 +1,23 @@
 import React, { useState } from "react";
 import { Outlet, Link, useLocation } from "react-router-dom";
-import { FileText, Settings, Upload, LayoutDashboard, LogOut, BarChart2, Users, UserCircle, TrendingUp, Menu, X } from "lucide-react";
+import {
+  FileText, Settings, Upload, LayoutDashboard, LogOut,
+  BarChart2, Users, UserCircle, TrendingUp, Menu, X,
+} from "lucide-react";
 import { useAuth } from "@/lib/AuthContext";
 import { cn } from "@/lib/utils";
-import ThemeToggle from "@/components/layout/ThemeToggle"; // FIXED: Using @ alias for absolute path
+import ThemeToggle from "@/components/layout/ThemeToggle";
+import TfaVerifyModal from "@/components/TfaVerifyModal"; // 👈 new
 
 const navItems = [
-  { path: "/",          label: "Dashboard",         icon: LayoutDashboard },
-  { path: "/generate",  label: "Generate Invoice",   icon: Upload },
-  { path: "/invoices",  label: "Invoices",           icon: FileText },
-  { path: "/reports",   label: "Reports",            icon: BarChart2 },
-  { path: "/customers", label: "Customers",          icon: Users },
-  { path: "/statistics",label: "Statistics",         icon: TrendingUp },
-  { path: "/settings",  label: "Vendor Settings",    icon: Settings },
-  { path: "/profile",   label: "Profile & Settings", icon: UserCircle },
+  { path: "/",           label: "Dashboard",         icon: LayoutDashboard },
+  { path: "/generate",   label: "Generate Invoice",   icon: Upload },
+  { path: "/invoices",   label: "Invoices",           icon: FileText },
+  { path: "/reports",    label: "Reports",            icon: BarChart2 },
+  { path: "/customers",  label: "Customers",          icon: Users },
+  { path: "/statistics", label: "Statistics",         icon: TrendingUp },
+  { path: "/settings",   label: "Vendor Settings",    icon: Settings },
+  { path: "/profile",    label: "Profile & Settings", icon: UserCircle },
 ];
 
 export default function AppLayout() {
@@ -28,7 +32,6 @@ export default function AppLayout() {
 
   const NavLink = ({ item }) => (
     <Link
-      key={item.path}
       to={item.path}
       onClick={() => setMobileOpen(false)}
       className={cn(
@@ -45,9 +48,12 @@ export default function AppLayout() {
 
   return (
     <div className="min-h-screen bg-background flex text-foreground">
+
+      {/* 2FA blocking modal — renders on top of everything when required */}
+      <TfaVerifyModal />
+
       {/* Sidebar */}
       <aside className="hidden md:flex w-64 flex-col bg-card border-r border-border fixed inset-y-0 z-30">
-        {/* Logo */}
         <div className="p-6 border-b border-border">
           <div className="flex items-center gap-2">
             <div className="w-8 h-8 rounded-lg bg-primary flex items-center justify-center">
@@ -60,18 +66,15 @@ export default function AppLayout() {
           </div>
         </div>
 
-        {/* Nav */}
         <nav className="flex-1 p-4 space-y-1 overflow-y-auto">
           {navItems.map(item => <NavLink key={item.path} item={item} />)}
         </nav>
 
-        {/* Footer Actions */}
         <div className="p-4 border-t border-border space-y-2">
           <div className="flex items-center justify-between px-3 py-2 text-xs text-muted-foreground font-medium">
             <span className="opacity-70">Appearance</span>
             <ThemeToggle />
           </div>
-          
           <button
             onClick={handleLogout}
             className="flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium text-muted-foreground hover:bg-destructive/10 hover:text-destructive transition-all w-full"
@@ -91,10 +94,12 @@ export default function AppLayout() {
             </div>
             <h1 className="text-sm font-bold text-foreground">Siva's Chola Invoices</h1>
           </div>
-          
           <div className="flex items-center gap-2">
             <ThemeToggle />
-            <button onClick={() => setMobileOpen(o => !o)} className="p-2 rounded-lg text-muted-foreground hover:bg-accent transition-colors">
+            <button
+              onClick={() => setMobileOpen(o => !o)}
+              className="p-2 rounded-lg text-muted-foreground hover:bg-accent transition-colors"
+            >
               {mobileOpen ? <X className="w-5 h-5" /> : <Menu className="w-5 h-5" />}
             </button>
           </div>
@@ -105,8 +110,11 @@ export default function AppLayout() {
             <nav className="p-3 space-y-0.5">
               {navItems.map(item => <NavLink key={item.path} item={item} />)}
               <div className="border-t border-border mt-2 pt-2">
-                <button onClick={handleLogout} className="flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium text-muted-foreground hover:bg-destructive/10 hover:text-destructive transition-all w-full">
-                  <LogOut className="w-4 h-4" />Logout
+                <button
+                  onClick={handleLogout}
+                  className="flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium text-muted-foreground hover:bg-destructive/10 hover:text-destructive transition-all w-full"
+                >
+                  <LogOut className="w-4 h-4" /> Logout
                 </button>
               </div>
             </nav>
