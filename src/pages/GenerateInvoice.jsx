@@ -42,18 +42,25 @@ function parseDeliveryDate(rawDate) {
   return format(new Date(), "yyyy-MM-dd");
 }
 
+// Returns true when the stored vendor_name is a raw CDAP placeholder (not a real name)
+const isCdapCode = (val) => /^CDAP\d+$/i.test((val || "").trim());
+const needsNameFill = (vendor) =>
+  !vendor?.vendor_name || isCdapCode(vendor.vendor_name) || vendor.vendor_name.trim() === "";
+
 export default function GenerateInvoice() {
   const { user } = useAuth();
   const navigate = useNavigate();
   const queryClient = useQueryClient();
-  const [uploading, setUploading] = useState(false);
+  const [uploading, setUploading]   = useState(false);
   const [extracting, setExtracting] = useState(false);
-  const [extracted, setExtracted] = useState(false);
-  const [fileUrl, setFileUrl] = useState("");
-  const [matchedVendor, setMatchedVendor] = useState(null);
-  const [vendorError, setVendorError] = useState("");
+  const [extracted, setExtracted]   = useState(false);
+  const [fileUrl, setFileUrl]       = useState("");
+  const [matchedVendor, setMatchedVendor]             = useState(null);
+  const [vendorError, setVendorError]                 = useState("");
   const [extractedVendorName, setExtractedVendorName] = useState("");
   const [extractedVendorAddress, setExtractedVendorAddress] = useState("");
+  // Tracks whether we auto-updated the vendor record in this session
+  const [vendorAutoUpdated, setVendorAutoUpdated] = useState(false);
 
   const [form, setForm] = useState({
     customer_name: "", customer_mobile: "", customer_address: "",
@@ -84,6 +91,42 @@ export default function GenerateInvoice() {
     },
   });
 
+  // Silently patches vendor_name (and optionally a real address) onto the vendor
+  // record when those fields are still blank / placeholder. This does NOT touch
+  // any previously generated invoice — invoices snapshot their own fields.
+  const patchVendorNameIfNeeded = async (vendor, nameFromPdf, addressFromPdf) => {
+    if (!vendor?.id) return;
+
+    const trimmedName    = (nameFromPdf    || "").trim();
+    const trimmedAddress = (addressFromPdf || "").trim();
+
+    // Determine what needs updating
+    const shouldUpdateName    = needsNameFill(vendor) && trimmedName && !isCdapCode(trimmedName);
+    const shouldUpdateAddress = (!vendor.vendor_address || vendor.vendor_address.trim() === "") && trimmedAddress;
+
+    if (!shouldUpdateName && !shouldUpdateAddress) return; // nothing to patch
+
+    const patch = {};
+    if (shouldUpdateName)    patch.vendor_name    = trimmedName;
+    if (shouldUpdateAddress) patch.vendor_address = trimmedAddress;
+
+    try {
+      await VendorProfile.update(vendor.id, patch);
+      queryClient.invalidateQueries({ queryKey: ["vendors"] });
+      queryClient.invalidateQueries({ queryKey: ["vendors", user?.id] });
+      setVendorAutoUpdated(true);
+
+      const what = [
+        shouldUpdateName    && "name",
+        shouldUpdateAddress && "address",
+      ].filter(Boolean).join(" & ");
+      toast.success(`Vendor ${what} auto-saved to Settings`);
+    } catch (err) {
+      // Non-fatal — the invoice can still be generated
+      console.warn("Could not auto-update vendor record:", err);
+    }
+  };
+
   const handleFileUpload = async (e) => {
     const file = e.target.files[0];
     if (!file) return;
@@ -93,6 +136,7 @@ export default function GenerateInvoice() {
     setExtracted(false);
     setExtractedVendorName("");
     setExtractedVendorAddress("");
+    setVendorAutoUpdated(false);
 
     try {
       setExtracting(true);
@@ -118,12 +162,17 @@ export default function GenerateInvoice() {
         }
 
         // Always store the name & address from the PDF regardless of match
-        setExtractedVendorName(d.vendor_name || "");
-        setExtractedVendorAddress(d.vendor_address || "");
+        const pdfVendorName    = d.vendor_name    || "";
+        const pdfVendorAddress = d.vendor_address || "";
+        setExtractedVendorName(pdfVendorName);
+        setExtractedVendorAddress(pdfVendorAddress);
 
         if (foundVendor) {
           setMatchedVendor(foundVendor);
           setVendorError("");
+
+          // ── Auto-fill vendor name/address in Settings if still a placeholder ──
+          await patchVendorNameIfNeeded(foundVendor, pdfVendorName, pdfVendorAddress);
         } else {
           setMatchedVendor(null);
           setVendorError(
@@ -148,14 +197,14 @@ export default function GenerateInvoice() {
         // ── Fill form ──
         setForm(prev => ({
           ...prev,
-          customer_name:        d.customer_name        || prev.customer_name,
-          customer_mobile:      d.customer_mobile      || prev.customer_mobile,
-          customer_address:     d.customer_address     || prev.customer_address,
-          product_description:  d.manufacturer || d.category || prev.product_description,
-          product_model:        d.model                || prev.product_model,
-          imei_serial:          d.imei_serial          || prev.imei_serial,
-          product_price:        d.product_price ? String(d.product_price) : prev.product_price,
-          invoice_date:         parseDeliveryDate(d.delivery_date),
+          customer_name:         d.customer_name        || prev.customer_name,
+          customer_mobile:       d.customer_mobile      || prev.customer_mobile,
+          customer_address:      d.customer_address     || prev.customer_address,
+          product_description:   d.manufacturer || d.category || prev.product_description,
+          product_model:         d.model                || prev.product_model,
+          imei_serial:           d.imei_serial          || prev.imei_serial,
+          product_price:         d.product_price ? String(d.product_price) : prev.product_price,
+          invoice_date:          parseDeliveryDate(d.delivery_date),
           delivery_order_number: d.delivery_order_number || prev.delivery_order_number,
         }));
 
@@ -178,31 +227,35 @@ export default function GenerateInvoice() {
       return;
     }
 
-    const price  = parseFloat(form.product_price);
-    const rate   = Math.round(price * 0.8475 * 100) / 100;
-    const cgst   = Math.round(price * 0.0763 * 100) / 100;
-    const sgst   = Math.round(price * 0.0763 * 100) / 100;
+    const price = parseFloat(form.product_price);
+    const rate  = Math.round(price * 0.8475 * 100) / 100;
+    const cgst  = Math.round(price * 0.0763 * 100) / 100;
+    const sgst  = Math.round(price * 0.0763 * 100) / 100;
     const invoiceNumber = getNextInvoiceNumber(invoices, form.invoice_date);
 
+    // Snapshot vendor name & address from PDF (not from the vendor record) so
+    // previously generated invoices remain unchanged if the record is later edited.
     createMutation.mutate({
-      invoice_number:         invoiceNumber,
-      invoice_date:           form.invoice_date,
-      vendor_id:              matchedVendor.id,
-      vendor_name:            extractedVendorName,
-      vendor_address:         extractedVendorAddress,
-      customer_name:          form.customer_name,
-      customer_mobile:        form.customer_mobile,
-      customer_address:       form.customer_address,
-      mode:                   form.mode,
-      product_description:    form.product_description,
-      product_model:          form.product_model,
-      imei_serial:            form.imei_serial,
-      quantity:               1,
-      product_price:          price,
+      invoice_number:        invoiceNumber,
+      invoice_date:          form.invoice_date,
+      vendor_id:             matchedVendor.id,
+      vendor_name:           extractedVendorName,   // PDF snapshot
+      vendor_address:        extractedVendorAddress, // PDF snapshot
+      vendor_gstin:          matchedVendor.gstin,
+      vendor_stamp_url:      matchedVendor.stamp_url || "",
+      customer_name:         form.customer_name,
+      customer_mobile:       form.customer_mobile,
+      customer_address:      form.customer_address,
+      mode:                  form.mode,
+      product_description:   form.product_description,
+      product_model:         form.product_model,
+      imei_serial:           form.imei_serial,
+      quantity:              1,
+      product_price:         price,
       rate, cgst, sgst,
-      grand_total:            price,
-      delivery_order_url:     fileUrl,
-      delivery_order_number:  form.delivery_order_number,
+      grand_total:           price,
+      delivery_order_url:    fileUrl,
+      delivery_order_number: form.delivery_order_number,
     });
   };
 
@@ -282,6 +335,11 @@ export default function GenerateInvoice() {
                       ? `Vendor matched: ${(matchedVendor.address || "").toUpperCase()}`
                       : "Data extracted, but vendor not matched"}
                   </p>
+                  {vendorAutoUpdated && (
+                    <p className="text-xs text-blue-600">
+                      ✦ Vendor name auto-saved to Settings
+                    </p>
+                  )}
                   <p className="text-xs text-muted-foreground">Click to upload a different file</p>
                 </div>
               ) : (
@@ -309,6 +367,9 @@ export default function GenerateInvoice() {
                 <div className="text-sm">
                   <span className="text-green-700 dark:text-green-400 font-medium">Vendor matched: </span>
                   <span className="text-green-800 dark:text-green-300 font-bold font-mono">{(matchedVendor.address || "").toUpperCase()}</span>
+                  {extractedVendorName && !isCdapCode(extractedVendorName) && (
+                    <span className="text-green-700 dark:text-green-400 ml-2">— {extractedVendorName}</span>
+                  )}
                   <span className="text-green-600 dark:text-green-500 ml-2 text-xs">
                     GSTIN: {matchedVendor.gstin}
                   </span>

@@ -78,15 +78,28 @@ export default function InvoiceView() {
     enabled: !!invoice,
   });
 
-  // Build the vendor object that InvoiceTemplate will use:
-  // - gstin and stamp come from the DB record (set by user in Settings)
-  // - vendor_name and address come from the invoice record (extracted from PDF)
-  //   falling back to the DB record if not present
-  const vendor = vendorFromDB ? {
-    ...vendorFromDB,
-    vendor_name: invoice?.vendor_name || vendorFromDB.vendor_name,
-    address:     invoice?.vendor_address || vendorFromDB.address,
-  } : null;
+  // A value looks like a raw CDAP code (e.g. "CDAP300254") when the DB
+  // vendor_name was set to the code as a NOT-NULL placeholder. In that case
+  // we must NOT use it as a display name — treat it as missing.
+  const isCdapCode = (val) => /^CDAP\d+$/i.test((val || "").trim());
+
+  // Priority for each field:
+  //   1. invoice-level snapshot (set at generation time from PDF)
+  //   2. DB vendor record — but only if it isn't a raw CDAP code placeholder
+  //   3. empty string
+  const resolveVendorField = (invoiceVal, dbVal) => {
+    if (invoiceVal && !isCdapCode(invoiceVal)) return invoiceVal;
+    if (dbVal && !isCdapCode(dbVal)) return dbVal;
+    return "";
+  };
+
+  const vendor = {
+    ...(vendorFromDB || {}),
+    vendor_name: resolveVendorField(invoice?.vendor_name, vendorFromDB?.vendor_name),
+    address:     resolveVendorField(invoice?.vendor_address, vendorFromDB?.address),
+    gstin:       invoice?.vendor_gstin || vendorFromDB?.gstin || "",
+    stamp_url:   invoice?.vendor_stamp_url || vendorFromDB?.stamp_url || "",
+  };
 
   const handlePrint = () => window.print();
 
@@ -166,7 +179,7 @@ export default function InvoiceView() {
   const changeZoom = (delta) =>
     setZoom(z => parseFloat(Math.min(2, Math.max(0.25, z + delta)).toFixed(2)));
 
-  if (loadingInvoice || loadingVendor)
+  if (loadingInvoice)
     return (
       <div className="flex items-center justify-center h-64">
         <div className="w-8 h-8 border-4 border-primary/20 border-t-primary rounded-full animate-spin" />
