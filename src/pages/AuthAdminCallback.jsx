@@ -2,14 +2,12 @@
 import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { supabase } from "@/api/supabaseClient";
-import { useAuth } from "@/lib/AuthContext";
 import { Loader2, ShieldCheck } from "lucide-react";
 
 export default function AuthAdminCallback() {
   const navigate = useNavigate();
-  const { isLoadingAuth } = useAuth();
-  const [status, setStatus] = useState("verifying"); // verifying | ready | error
-  const [sessionUser, setSessionUser] = useState(null);
+  const [status, setStatus]     = useState("verifying");
+  const [userEmail, setUserEmail] = useState(null);
 
   useEffect(() => {
     let redirected = false;
@@ -17,56 +15,46 @@ export default function AuthAdminCallback() {
     function doRedirect(session) {
       if (redirected) return;
       redirected = true;
-      setSessionUser(session.user);
-      setStatus("ready");
+      setUserEmail(session.user.email);
+      setTimeout(() => navigate("/", { replace: true }), 800);
     }
 
-    // Listen for Supabase to process the token from the URL hash
+    // Supabase auto-processes the #access_token hash and fires SIGNED_IN
     const { data: { subscription } } = supabase.auth.onAuthStateChange(
       (event, session) => {
         console.log("[AdminCallback] event:", event, session?.user?.email);
-        if ((event === "PASSWORD_RECOVERY" || event === "SIGNED_IN") && session) {
-          doRedirect(session);
-        }
+        if (event === "SIGNED_IN" && session) doRedirect(session);
       }
     );
 
-    // Also check immediately
+    // Also check immediately in case already resolved
     supabase.auth.getSession().then(({ data: { session } }) => {
+      console.log("[AdminCallback] getSession:", session?.user?.email);
       if (session) doRedirect(session);
     });
 
-    // Timeout fallback
     const timeout = setTimeout(() => {
-      if (!redirected) setStatus("error");
-    }, 8000);
+      if (!redirected) {
+        console.log("[AdminCallback] timeout — no session");
+        setStatus("error");
+      }
+    }, 10000);
 
     return () => {
       subscription.unsubscribe();
       clearTimeout(timeout);
     };
-  }, []);
-
-  // Once session is ready AND AuthContext has finished loading, navigate
-  useEffect(() => {
-    if (status === "ready" && !isLoadingAuth && sessionUser) {
-      navigate("/", { replace: true });
-    }
-  }, [status, isLoadingAuth, sessionUser, navigate]);
+  }, [navigate]);
 
   if (status === "error") {
     return (
       <div className="min-h-screen flex items-center justify-center bg-background px-4">
         <div className="text-center space-y-3 max-w-sm">
-          <p className="text-sm text-destructive font-medium">
-            Session could not be established.
-          </p>
-          <p className="text-xs text-muted-foreground">
-            The link may have expired. Ask the admin to generate a new one.
-          </p>
+          <p className="text-sm text-destructive font-medium">Session could not be established.</p>
+          <p className="text-xs text-muted-foreground">The link may have expired. Ask the admin to generate a new one.</p>
           <button
             onClick={() => navigate("/login", { replace: true })}
-            className="mt-2 rounded-lg bg-primary text-primary-foreground px-4 py-2 text-sm font-medium"
+            className="rounded-lg bg-primary text-primary-foreground px-4 py-2 text-sm font-medium"
           >
             Go to Login
           </button>
@@ -83,9 +71,7 @@ export default function AuthAdminCallback() {
         </div>
         <Loader2 className="w-6 h-6 animate-spin text-primary" />
         <p className="text-sm text-muted-foreground">
-          {sessionUser
-            ? `Signing in as ${sessionUser.email}…`
-            : "Verifying session…"}
+          {userEmail ? `Signing in as ${userEmail}…` : "Verifying session…"}
         </p>
       </div>
     </div>
