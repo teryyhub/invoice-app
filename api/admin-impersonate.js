@@ -22,8 +22,7 @@ export default async function handler(req, res) {
   }
 
   try {
-    // 1. Decode the JWT to get user ID without verification
-    //    (we trust it because we verify admin status via service role next)
+    // 1. Decode JWT to get caller user ID
     const parts = admin_token.split(".");
     if (parts.length !== 3) {
       return res.status(401).json({ error: "Invalid token format" });
@@ -43,12 +42,11 @@ export default async function handler(req, res) {
       return res.status(401).json({ error: "No user ID in token" });
     }
 
-    // Check token expiry
     if (payload.exp && Date.now() / 1000 > payload.exp) {
       return res.status(401).json({ error: "Token expired" });
     }
 
-    // 2. Verify caller is admin using service role (trusted)
+    // 2. Verify caller is admin using service role
     const profileRes = await fetch(
       `${SUPABASE_URL}/rest/v1/profiles?id=eq.${callerId}&select=is_admin`,
       {
@@ -63,9 +61,24 @@ export default async function handler(req, res) {
       return res.status(403).json({ error: "Admin access required" });
     }
 
-    // 3. Generate magic link via Supabase Admin API
+    // 3. Get target user email first
+    const userRes = await fetch(
+      `${SUPABASE_URL}/auth/v1/admin/users/${target_user_id}`,
+      {
+        headers: {
+          Authorization: `Bearer ${SERVICE_KEY}`,
+          apikey: SERVICE_KEY,
+        },
+      }
+    );
+    const userData = await userRes.json();
+    if (!userRes.ok || !userData?.email) {
+      return res.status(404).json({ error: "Target user not found", detail: userData });
+    }
+
+    // 4. Generate magic link using correct endpoint
     const linkRes = await fetch(
-      `${SUPABASE_URL}/auth/v1/admin/users/${target_user_id}/generate_link`,
+      `${SUPABASE_URL}/auth/v1/admin/generateLink`,
       {
         method: "POST",
         headers: {
@@ -75,17 +88,27 @@ export default async function handler(req, res) {
         },
         body: JSON.stringify({
           type: "magiclink",
-          redirect_to: "https://sivacholainvoices.vercel.app/admin-callback",
+          email: userData.email,
+          options: {
+            redirect_to: "https://sivacholainvoices.vercel.app/admin-callback",
+          },
         }),
       }
     );
 
-    const linkData = await linkRes.json();
+    const linkText = await linkRes.text();
+    let linkData;
+    try {
+      linkData = JSON.parse(linkText);
+    } catch (e) {
+      return res.status(500).json({ error: "Invalid response from Supabase", raw: linkText.slice(0, 200) });
+    }
+
     if (!linkRes.ok) {
       return res.status(500).json({ error: linkData.message || "Failed to generate link", detail: linkData });
     }
 
-    return res.status(200).json({ link: linkData.action_link });
+    return res.status(200).json({ link: linkData.action_link || linkData.properties?.action_link });
 
   } catch (err) {
     return res.status(500).json({ error: err.message });
