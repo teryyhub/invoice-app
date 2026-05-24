@@ -11,13 +11,13 @@ import {
   Store, Tag, FileText
 } from 'lucide-react';
 import { toast } from 'sonner';
+import * as XLSX from 'xlsx';
 
 const MONTHS = [
   'January','February','March','April','May','June',
   'July','August','September','October','November','December'
 ];
 
-// ── Stat card ──────────────────────────────────────────────────────────────
 function StatCard({ title, value, sub }) {
   return (
     <Card>
@@ -25,15 +25,14 @@ function StatCard({ title, value, sub }) {
         <CardTitle className="text-sm font-medium text-muted-foreground">{title}</CardTitle>
       </CardHeader>
       <CardContent>
-        <p className="text-3xl font-bold">{value}</p>
+        <p className="text-2xl sm:text-3xl font-bold">{value}</p>
         {sub && <p className="text-xs text-muted-foreground mt-1">{sub}</p>}
       </CardContent>
     </Card>
   );
 }
 
-// ── Ranked table ───────────────────────────────────────────────────────────
-function RankedTable({ title, icon: Icon, rows, keyLabel }) {
+function RankedTable({ title, icon: Icon, rows }) {
   const max = rows[0]?.revenue ?? 1;
   return (
     <Card>
@@ -50,21 +49,18 @@ function RankedTable({ title, icon: Icon, rows, keyLabel }) {
             {rows.map((r, i) => (
               <div key={i} className="px-4 py-3 space-y-1">
                 <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-2">
-                    <span className="text-xs font-bold text-muted-foreground w-5">#{i + 1}</span>
-                    <span className="text-sm font-medium truncate max-w-[180px]">{r.name || '—'}</span>
+                  <div className="flex items-center gap-2 min-w-0">
+                    <span className="text-xs font-bold text-muted-foreground w-5 shrink-0">#{i + 1}</span>
+                    <span className="text-sm font-medium truncate">{r.name || '—'}</span>
                   </div>
-                  <div className="text-right">
+                  <div className="text-right shrink-0 ml-2">
                     <p className="text-sm font-semibold">₹{r.revenue.toLocaleString('en-IN')}</p>
                     <p className="text-xs text-muted-foreground">{r.count} invoice{r.count !== 1 ? 's' : ''}</p>
                   </div>
                 </div>
-                {/* Progress bar */}
                 <div className="h-1.5 w-full bg-muted rounded-full overflow-hidden">
-                  <div
-                    className="h-full bg-primary rounded-full transition-all"
-                    style={{ width: `${Math.round((r.revenue / max) * 100)}%` }}
-                  />
+                  <div className="h-full bg-primary rounded-full transition-all"
+                    style={{ width: `${Math.round((r.revenue / max) * 100)}%` }} />
                 </div>
               </div>
             ))}
@@ -75,13 +71,12 @@ function RankedTable({ title, icon: Icon, rows, keyLabel }) {
   );
 }
 
-// ── Main ───────────────────────────────────────────────────────────────────
 export default function Reports() {
   const { user } = useAuth();
 
   const [selectedMonth, setSelectedMonth] = useState(String(new Date().getMonth()));
   const [selectedYear, setSelectedYear]   = useState(String(new Date().getFullYear()));
-  const [activeTab, setActiveTab]         = useState('overview'); // 'overview' | 'vendor' | 'brand' | 'detail'
+  const [activeTab, setActiveTab]         = useState('overview');
   const [currentPage, setCurrentPage]     = useState(1);
   const pageSize = 15;
 
@@ -103,7 +98,6 @@ export default function Reports() {
     return m;
   }, [vendors]);
 
-  // Filter by selected month/year
   const filtered = useMemo(() => {
     if (!Array.isArray(invoices)) return [];
     return invoices.filter(inv => {
@@ -116,7 +110,6 @@ export default function Reports() {
   const totalCount = filtered.length;
   const avgValue   = totalCount > 0 ? Math.round(totalSales / totalCount) : 0;
 
-  // Group by vendor
   const vendorStats = useMemo(() => {
     const map = {};
     filtered.forEach(inv => {
@@ -128,7 +121,6 @@ export default function Reports() {
     return Object.values(map).sort((a, b) => b.revenue - a.revenue);
   }, [filtered, vendorMap]);
 
-  // Group by brand (product_description)
   const brandStats = useMemo(() => {
     const map = {};
     filtered.forEach(inv => {
@@ -140,8 +132,18 @@ export default function Reports() {
     return Object.values(map).sort((a, b) => b.revenue - a.revenue);
   }, [filtered]);
 
-  // Paginated detail
-  const totalPages       = Math.ceil(totalCount / pageSize);
+  const productStats = useMemo(() => {
+    const map = {};
+    filtered.forEach(inv => {
+      const name = inv.product_model || 'Unknown';
+      if (!map[name]) map[name] = { name, revenue: 0, count: 0 };
+      map[name].revenue += inv.grand_total || 0;
+      map[name].count   += 1;
+    });
+    return Object.values(map).sort((a, b) => b.count - a.count);
+  }, [filtered]);
+
+  const totalPages        = Math.ceil(totalCount / pageSize);
   const paginatedInvoices = useMemo(() => {
     const start = (currentPage - 1) * pageSize;
     return filtered.slice(start, start + pageSize);
@@ -149,27 +151,118 @@ export default function Reports() {
 
   const monthLabel = `${MONTHS[parseInt(selectedMonth)]} ${selectedYear}`;
 
-  const handleExportCSV = () => {
+  // ── Export as Excel with multiple sheets ──────────────────────────────
+  const handleExportXLSX = () => {
     if (filtered.length === 0) { toast.error("No data to export."); return; }
-    let csv = `\ufeffMONTHLY SALES REPORT: ${monthLabel}\n`;
-    csv += `Total Invoices,${totalCount}\nTotal Revenue,₹${totalSales.toFixed(2)}\n\n`;
-    csv += ["Invoice No","Date","App ID","Customer","Mobile","Asset","Brand","IMEI","Scheme","Total"].join(",") + "\n";
-    filtered.forEach(inv => {
-      csv += [
-        `"${inv.invoice_number||''}"`, `"${inv.invoice_date||''}"`,
-        `"${inv.delivery_order_number||''}"`, `"${inv.customer_name||''}"`,
-        `"${inv.customer_mobile||''}"`, `"${inv.product_model||''}"`,
-        `"${inv.product_description||''}"`, `"${inv.imei_serial||''}"`,
-        `"${inv.mode||''}"`, `"${inv.grand_total||0}"`
-      ].join(",") + "\n";
-    });
-    const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
-    const url  = URL.createObjectURL(blob);
-    const a    = document.createElement("a");
-    a.href = url; a.download = `Report_${monthLabel.replace(' ','_')}.csv`;
-    document.body.appendChild(a); a.click();
-    document.body.removeChild(a); URL.revokeObjectURL(url);
-    toast.success("Report downloaded!");
+
+    const wb = XLSX.utils.book_new();
+
+    // ── Sheet 1: Overview ──
+    const overviewData = [
+      [`MONTHLY SALES REPORT: ${monthLabel}`],
+      [`Generated on: ${new Date().toLocaleString('en-IN')}`],
+      [],
+      ['Metric', 'Value'],
+      ['Total Invoices', totalCount],
+      ['Total Revenue (₹)', totalSales],
+      ['Average Invoice Value (₹)', avgValue],
+      ['Brands Active', brandStats.length],
+      ['Vendors Active', vendorStats.length],
+      [],
+      ['TOP VENDORS'],
+      ['#', 'Vendor', 'Invoices', 'Revenue (₹)', 'Share (%)'],
+      ...vendorStats.slice(0, 8).map((v, i) => [
+        i + 1, v.name, v.count, v.revenue,
+        totalSales > 0 ? +((v.revenue / totalSales) * 100).toFixed(1) : 0,
+      ]),
+      [],
+      ['TOP BRANDS'],
+      ['#', 'Brand', 'Units Sold', 'Revenue (₹)', 'Share (%)'],
+      ...brandStats.slice(0, 8).map((b, i) => [
+        i + 1, b.name, b.count, b.revenue,
+        totalSales > 0 ? +((b.revenue / totalSales) * 100).toFixed(1) : 0,
+      ]),
+    ];
+    const ws1 = XLSX.utils.aoa_to_sheet(overviewData);
+    ws1['!cols'] = [{ wch: 5 }, { wch: 30 }, { wch: 12 }, { wch: 18 }, { wch: 12 }];
+    XLSX.utils.book_append_sheet(wb, ws1, 'Overview');
+
+    // ── Sheet 2: By Vendor ──
+    const vendorRows = [
+      [`VENDOR-WISE REPORT: ${monthLabel}`],
+      [],
+      ['#', 'Vendor', 'Invoices', 'Revenue (₹)', 'Avg Invoice (₹)', 'Share (%)'],
+      ...vendorStats.map((v, i) => [
+        i + 1, v.name, v.count, v.revenue,
+        Math.round(v.revenue / v.count),
+        totalSales > 0 ? +((v.revenue / totalSales) * 100).toFixed(1) : 0,
+      ]),
+      [],
+      ['', 'TOTAL', totalCount, totalSales, avgValue, 100],
+    ];
+    const ws2 = XLSX.utils.aoa_to_sheet(vendorRows);
+    ws2['!cols'] = [{ wch: 5 }, { wch: 30 }, { wch: 12 }, { wch: 18 }, { wch: 18 }, { wch: 12 }];
+    XLSX.utils.book_append_sheet(wb, ws2, 'By Vendor');
+
+    // ── Sheet 3: By Brand ──
+    const brandRows = [
+      [`BRAND-WISE REPORT: ${monthLabel}`],
+      [],
+      ['#', 'Brand', 'Units Sold', 'Revenue (₹)', 'Avg Price (₹)', 'Share (%)'],
+      ...brandStats.map((b, i) => [
+        i + 1, b.name, b.count, b.revenue,
+        Math.round(b.revenue / b.count),
+        totalSales > 0 ? +((b.revenue / totalSales) * 100).toFixed(1) : 0,
+      ]),
+      [],
+      ['', 'TOTAL', totalCount, totalSales, avgValue, 100],
+    ];
+    const ws3 = XLSX.utils.aoa_to_sheet(brandRows);
+    ws3['!cols'] = [{ wch: 5 }, { wch: 30 }, { wch: 12 }, { wch: 18 }, { wch: 18 }, { wch: 12 }];
+    XLSX.utils.book_append_sheet(wb, ws3, 'By Brand');
+
+    // ── Sheet 4: Top Products ──
+    const productRows = [
+      [`TOP PRODUCTS: ${monthLabel}`],
+      [],
+      ['#', 'Product', 'Units Sold', 'Revenue (₹)'],
+      ...productStats.map((p, i) => [i + 1, p.name, p.count, p.revenue]),
+    ];
+    const ws4 = XLSX.utils.aoa_to_sheet(productRows);
+    ws4['!cols'] = [{ wch: 5 }, { wch: 35 }, { wch: 12 }, { wch: 18 }];
+    XLSX.utils.book_append_sheet(wb, ws4, 'Top Products');
+
+    // ── Sheet 5: Detailed Invoices ──
+    const detailRows = [
+      [`DETAILED INVOICE LIST: ${monthLabel}`],
+      [],
+      [
+        'Invoice No', 'Date', 'App ID', 'Customer', 'Mobile',
+        'Asset', 'Brand', 'IMEI', 'Scheme', 'Total (₹)',
+      ],
+      ...filtered.map(inv => [
+        inv.invoice_number   || '',
+        inv.invoice_date     || '',
+        inv.delivery_order_number || '',
+        inv.customer_name    || '',
+        inv.customer_mobile  || '',
+        inv.product_model    || '',
+        inv.product_description || '',
+        inv.imei_serial      || '',
+        inv.mode             || '',
+        inv.grand_total      || 0,
+      ]),
+    ];
+    const ws5 = XLSX.utils.aoa_to_sheet(detailRows);
+    ws5['!cols'] = [
+      { wch: 14 }, { wch: 12 }, { wch: 14 }, { wch: 22 }, { wch: 14 },
+      { wch: 20 }, { wch: 18 }, { wch: 18 }, { wch: 14 }, { wch: 12 },
+    ];
+    XLSX.utils.book_append_sheet(wb, ws5, 'Detail');
+
+    // Write and download
+    XLSX.writeFile(wb, `Report_${monthLabel.replace(' ', '_')}.xlsx`);
+    toast.success(`Excel report exported — 5 sheets, ${totalCount} invoices`);
   };
 
   if (isLoading) return (
@@ -186,29 +279,29 @@ export default function Reports() {
   ];
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-4 p-1">
 
       {/* Header */}
-      <div className="flex items-center justify-between flex-wrap gap-3">
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
         <div>
-          <h1 className="text-2xl font-bold text-foreground">Reports</h1>
-          <p className="text-muted-foreground text-sm">Monthly sales & vendor analytics</p>
+          <h1 className="text-xl sm:text-2xl font-bold text-foreground">Reports</h1>
+          <p className="text-muted-foreground text-sm">Monthly sales &amp; vendor analytics</p>
         </div>
-        <Button variant="outline" className="gap-2" onClick={handleExportCSV}>
-          <Download className="w-4 h-4" /> Export CSV
+        <Button variant="outline" className="gap-2 w-full sm:w-auto" onClick={handleExportXLSX}>
+          <Download className="w-4 h-4" /> Export Excel (.xlsx)
         </Button>
       </div>
 
       {/* Filters */}
       <div className="flex gap-3 flex-wrap">
         <Select value={selectedMonth} onValueChange={v => { setSelectedMonth(v); setCurrentPage(1); }}>
-          <SelectTrigger className="w-40"><SelectValue /></SelectTrigger>
+          <SelectTrigger className="w-36 sm:w-40"><SelectValue /></SelectTrigger>
           <SelectContent>
             {MONTHS.map((m, i) => <SelectItem key={i} value={String(i)}>{m}</SelectItem>)}
           </SelectContent>
         </Select>
         <Select value={selectedYear} onValueChange={v => { setSelectedYear(v); setCurrentPage(1); }}>
-          <SelectTrigger className="w-28"><SelectValue /></SelectTrigger>
+          <SelectTrigger className="w-24 sm:w-28"><SelectValue /></SelectTrigger>
           <SelectContent>
             {['2023','2024','2025','2026'].map(y => <SelectItem key={y} value={y}>{y}</SelectItem>)}
           </SelectContent>
@@ -216,7 +309,7 @@ export default function Reports() {
       </div>
 
       {/* Summary cards */}
-      <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
         <StatCard title="Total Invoices" value={totalCount} />
         <StatCard title="Total Revenue"  value={`₹${totalSales.toLocaleString('en-IN')}`} />
         <StatCard title="Avg Invoice"    value={totalCount > 0 ? `₹${avgValue.toLocaleString('en-IN')}` : '—'} />
@@ -224,29 +317,24 @@ export default function Reports() {
       </div>
 
       {/* Tabs */}
-      <div className="flex gap-1 border-b border-border">
+      <div className="flex gap-0 border-b border-border overflow-x-auto scrollbar-hide">
         {tabs.map(t => (
-          <button
-            key={t.id}
-            onClick={() => setActiveTab(t.id)}
-            className={`px-4 py-2 text-sm font-medium transition-colors border-b-2 -mb-px ${
+          <button key={t.id} onClick={() => setActiveTab(t.id)}
+            className={`px-3 sm:px-4 py-2 text-xs sm:text-sm font-medium transition-colors border-b-2 -mb-px whitespace-nowrap flex-shrink-0 ${
               activeTab === t.id
                 ? 'border-primary text-primary'
                 : 'border-transparent text-muted-foreground hover:text-foreground'
-            }`}
-          >
+            }`}>
             {t.label}
           </button>
         ))}
       </div>
 
-      {/* Overview tab */}
+      {/* Overview */}
       {activeTab === 'overview' && (
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-          <RankedTable title="Top Vendors"  icon={Store} rows={vendorStats.slice(0, 8)} keyLabel="vendor" />
-          <RankedTable title="Top Brands"   icon={Tag}   rows={brandStats.slice(0, 8)}  keyLabel="brand" />
-
-          {/* Top products */}
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <RankedTable title="Top Vendors" icon={Store} rows={vendorStats.slice(0, 8)} />
+          <RankedTable title="Top Brands"  icon={Tag}   rows={brandStats.slice(0, 8)} />
           <Card>
             <CardHeader className="pb-3">
               <CardTitle className="text-base flex items-center gap-2">
@@ -254,28 +342,20 @@ export default function Reports() {
               </CardTitle>
             </CardHeader>
             <CardContent className="p-0">
-              {(() => {
-                const map = {};
-                filtered.forEach(inv => {
-                  const name = inv.product_model || 'Unknown';
-                  if (!map[name]) map[name] = { name, revenue: 0, count: 0 };
-                  map[name].revenue += inv.grand_total || 0;
-                  map[name].count   += 1;
-                });
-                const rows = Object.values(map).sort((a,b) => b.count - a.count).slice(0,8);
-                const max  = rows[0]?.count ?? 1;
-                return rows.length === 0 ? (
-                  <p className="text-sm text-muted-foreground p-4">No data</p>
-                ) : (
-                  <div className="divide-y divide-border">
-                    {rows.map((r, i) => (
+              {productStats.length === 0 ? (
+                <p className="text-sm text-muted-foreground p-4">No data</p>
+              ) : (
+                <div className="divide-y divide-border">
+                  {productStats.slice(0, 8).map((r, i) => {
+                    const max = productStats[0]?.count ?? 1;
+                    return (
                       <div key={i} className="px-4 py-3 space-y-1">
                         <div className="flex items-center justify-between">
-                          <div className="flex items-center gap-2">
-                            <span className="text-xs font-bold text-muted-foreground w-5">#{i+1}</span>
-                            <span className="text-sm font-medium truncate max-w-[180px]">{r.name}</span>
+                          <div className="flex items-center gap-2 min-w-0">
+                            <span className="text-xs font-bold text-muted-foreground w-5 shrink-0">#{i+1}</span>
+                            <span className="text-sm font-medium truncate">{r.name}</span>
                           </div>
-                          <div className="text-right">
+                          <div className="text-right shrink-0 ml-2">
                             <p className="text-sm font-semibold">{r.count} sold</p>
                             <p className="text-xs text-muted-foreground">₹{r.revenue.toLocaleString('en-IN')}</p>
                           </div>
@@ -284,10 +364,10 @@ export default function Reports() {
                           <div className="h-full bg-primary rounded-full" style={{ width: `${Math.round((r.count/max)*100)}%` }} />
                         </div>
                       </div>
-                    ))}
-                  </div>
-                );
-              })()}
+                    );
+                  })}
+                </div>
+              )}
             </CardContent>
           </Card>
         </div>
@@ -321,11 +401,7 @@ export default function Reports() {
                         <td className="px-4 py-3 text-right">{v.count}</td>
                         <td className="px-4 py-3 text-right font-semibold">₹{v.revenue.toLocaleString('en-IN')}</td>
                         <td className="px-4 py-3 text-right">₹{Math.round(v.revenue/v.count).toLocaleString('en-IN')}</td>
-                        <td className="px-4 py-3 text-right">
-                          <span className="inline-flex items-center gap-1">
-                            {totalSales > 0 ? ((v.revenue/totalSales)*100).toFixed(1) : 0}%
-                          </span>
-                        </td>
+                        <td className="px-4 py-3 text-right">{totalSales > 0 ? ((v.revenue/totalSales)*100).toFixed(1) : 0}%</td>
                       </tr>
                     ))}
                   </tbody>
@@ -373,9 +449,7 @@ export default function Reports() {
                         <td className="px-4 py-3 text-right">{b.count}</td>
                         <td className="px-4 py-3 text-right font-semibold">₹{b.revenue.toLocaleString('en-IN')}</td>
                         <td className="px-4 py-3 text-right">₹{Math.round(b.revenue/b.count).toLocaleString('en-IN')}</td>
-                        <td className="px-4 py-3 text-right">
-                          {totalSales > 0 ? ((b.revenue/totalSales)*100).toFixed(1) : 0}%
-                        </td>
+                        <td className="px-4 py-3 text-right">{totalSales > 0 ? ((b.revenue/totalSales)*100).toFixed(1) : 0}%</td>
                       </tr>
                     ))}
                   </tbody>
@@ -426,16 +500,16 @@ export default function Reports() {
                     <tbody className="divide-y divide-border">
                       {paginatedInvoices.map((inv, i) => (
                         <tr key={i} className="hover:bg-accent/50 transition-colors">
-                          <td className="px-3 py-3 font-medium">{inv.invoice_number}</td>
-                          <td className="px-3 py-3">{inv.invoice_date}</td>
-                          <td className="px-3 py-3">{inv.delivery_order_number}</td>
-                          <td className="px-3 py-3">{inv.customer_name}</td>
-                          <td className="px-3 py-3">{inv.customer_mobile}</td>
-                          <td className="px-3 py-3">{inv.product_model}</td>
-                          <td className="px-3 py-3">{inv.product_description}</td>
-                          <td className="px-3 py-3">{inv.imei_serial}</td>
-                          <td className="px-3 py-3">{inv.mode}</td>
-                          <td className="px-3 py-3 text-right font-semibold">₹{(inv.grand_total||0).toLocaleString('en-IN')}</td>
+                          <td className="px-3 py-3 font-medium whitespace-nowrap">{inv.invoice_number}</td>
+                          <td className="px-3 py-3 whitespace-nowrap">{inv.invoice_date}</td>
+                          <td className="px-3 py-3 whitespace-nowrap">{inv.delivery_order_number}</td>
+                          <td className="px-3 py-3 whitespace-nowrap">{inv.customer_name}</td>
+                          <td className="px-3 py-3 whitespace-nowrap">{inv.customer_mobile}</td>
+                          <td className="px-3 py-3 whitespace-nowrap">{inv.product_model}</td>
+                          <td className="px-3 py-3 whitespace-nowrap">{inv.product_description}</td>
+                          <td className="px-3 py-3 whitespace-nowrap">{inv.imei_serial}</td>
+                          <td className="px-3 py-3 whitespace-nowrap">{inv.mode}</td>
+                          <td className="px-3 py-3 text-right font-semibold whitespace-nowrap">₹{(inv.grand_total||0).toLocaleString('en-IN')}</td>
                         </tr>
                       ))}
                     </tbody>
