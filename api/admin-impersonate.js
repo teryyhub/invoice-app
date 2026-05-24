@@ -1,4 +1,6 @@
 // api/admin-impersonate.js
+import { createClient } from "@supabase/supabase-js";
+
 export default async function handler(req, res) {
   if (req.method !== "POST") return res.status(405).end();
 
@@ -34,79 +36,33 @@ export default async function handler(req, res) {
     if (!callerId) return res.status(401).json({ error: "No user ID in token" });
     if (payload.exp && Date.now() / 1000 > payload.exp) return res.status(401).json({ error: "Token expired" });
 
-    // 2. Verify caller is admin
-    const profileRes = await fetch(
-      `${SUPABASE_URL}/rest/v1/profiles?id=eq.${callerId}&select=is_admin`,
-      {
-        headers: {
-          Authorization: `Bearer ${SERVICE_KEY}`,
-          apikey: SERVICE_KEY,
-        },
-      }
-    );
-    const profiles = await profileRes.json();
-    if (!profiles?.[0]?.is_admin) return res.status(403).json({ error: "Admin access required" });
+    // 2. Create admin supabase client with service role
+    const adminClient = createClient(SUPABASE_URL, SERVICE_KEY, {
+      auth: { autoRefreshToken: false, persistSession: false },
+    });
 
-    // 3. Get target user email
-    const userRes = await fetch(
-      `${SUPABASE_URL}/auth/v1/admin/users/${target_user_id}`,
-      {
-        headers: {
-          Authorization: `Bearer ${SERVICE_KEY}`,
-          apikey: SERVICE_KEY,
-        },
-      }
-    );
-    const userText = await userRes.text();
-    let userData;
-    try { userData = JSON.parse(userText); } catch(e) {
-      return res.status(500).json({ error: "Failed to get user", raw: userText.slice(0, 200) });
-    }
-    if (!userRes.ok || !userData?.email) {
-      return res.status(404).json({ error: "Target user not found", detail: userData });
-    }
+    // 3. Verify caller is admin
+    const { data: profiles } = await adminClient
+      .from("profiles")
+      .select("is_admin")
+      .eq("id", callerId)
+      .single();
 
-    // 4. Generate OTP link — correct Supabase endpoint
-    const linkRes = await fetch(
-      `${SUPABASE_URL}/auth/v1/admin/users/${target_user_id}/generate_link`,
-      {
-        method: "POST",
-        headers: {
-          Authorization: `Bearer ${SERVICE_KEY}`,
-          apikey: SERVICE_KEY,
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          type: "magiclink",
-          redirect_to: "https://sivacholainvoices.vercel.app/admin-callback",
-        }),
-      }
-    );
+    if (!profiles?.is_admin) return res.status(403).json({ error: "Admin access required" });
 
-    const linkText = await linkRes.text();
-    let linkData;
-    try { linkData = JSON.parse(linkText); } catch(e) {
-      return res.status(500).json({ error: "Invalid response", raw: linkText.slice(0, 200) });
-    }
+    // 4. Generate magic link using admin client
+    const { data, error } = await adminClient.auth.admin.generateLink({
+      type: "magiclink",
+      email: (await adminClient.auth.admin.getUserById(target_user_id)).data.user?.email,
+      options: {
+        redirectTo: "https://sivacholainvoices.vercel.app/admin-callback",
+      },
+    });
 
-    if (!linkRes.ok) {
-      return res.status(500).json({ error: linkData.message || "Failed", detail: linkData });
-    }
+    if (error) return res.status(500).json({ error: error.message });
+    if (!data?.properties?.action_link) return res.status(500).json({ error: "No link returned", detail: data });
 
-    // action_link is the full URL including the token
-    const link = linkData.action_link || linkData.properties?.action_link;
-    if (!link) {
-      return res.status(500).json({ error: "No action_link in response", detail: linkData });
-    }
-
-    // Rewrite the action_link to redirect to our callback instead of Supabase's default
-    const url = new URL(link);
-    const token = url.searchParams.get("token");
-    const type  = url.searchParams.get("type");
-
-    const finalLink = `${SUPABASE_URL}/auth/v1/verify?token=${token}&type=${type}&redirect_to=https://sivacholainvoices.vercel.app/admin-callback`;
-
-    return res.status(200).json({ link: finalLink });
+    return res.status(200).json({ link: data.properties.action_link });
 
   } catch (err) {
     return res.status(500).json({ error: err.message });
