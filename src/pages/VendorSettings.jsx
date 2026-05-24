@@ -194,7 +194,7 @@ function EditVendorForm({ initial, onSave, onCancel, isSaving }) {
         <Textarea
           value={form.vendor_address}
           onChange={e => setForm(p => ({ ...p, vendor_address: e.target.value }))}
-          placeholder=" 
+          placeholder=" "
           rows={2}
           className="resize-none"
         />

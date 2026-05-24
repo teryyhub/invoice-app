@@ -95,9 +95,11 @@ export default function InvoiceView() {
 
   const vendor = {
     ...(vendorFromDB || {}),
-    vendor_name: resolveVendorField(invoice?.vendor_name, vendorFromDB?.vendor_name),
-    address:     resolveVendorField(invoice?.vendor_address, vendorFromDB?.address),
-    gstin:       invoice?.vendor_gstin || vendorFromDB?.gstin || "",
+    vendor_name: resolveVendorField(invoice?.vendor_name,    vendorFromDB?.vendor_name),
+    // For address: snapshot first, then fall back to vendor_address (postal address),
+    // NOT vendorFromDB.address which is the vendor code (e.g. CDAP000127)
+    address:     resolveVendorField(invoice?.vendor_address, vendorFromDB?.vendor_address),
+    gstin:       invoice?.vendor_gstin     || vendorFromDB?.gstin     || "",
     stamp_url:   invoice?.vendor_stamp_url || vendorFromDB?.stamp_url || "",
   };
 
