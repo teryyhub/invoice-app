@@ -4,7 +4,7 @@ import { Invoice } from "@/api/invoices";
 import { VendorProfile } from "@/api/vendorProfiles";
 import { uploadFile } from "@/api/storage";
 import { extractDataFromFile } from "@/api/extractor";
-import { useAuth } from "@/lib/AuthContext"; 
+import { useAuth } from "@/lib/AuthContext";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -17,7 +17,9 @@ import { format, parse } from "date-fns";
 function getNextInvoiceNumber(invoices, invoiceDateStr) {
   const dateObj = invoiceDateStr ? new Date(invoiceDateStr) : new Date();
   const monthShort = format(dateObj, "MMM");
-  const monthInvoices = invoices.filter(inv => inv.invoice_number?.toLowerCase().startsWith(monthShort.toLowerCase()));
+  const monthInvoices = invoices.filter(inv =>
+    inv.invoice_number?.toLowerCase().startsWith(monthShort.toLowerCase())
+  );
   const maxNum = monthInvoices.reduce((max, inv) => {
     const parts = inv.invoice_number.split(" ");
     const num = parseInt(parts[1], 10);
@@ -40,12 +42,8 @@ function parseDeliveryDate(rawDate) {
   return format(new Date(), "yyyy-MM-dd");
 }
 
-function normalizeName(name) {
-  return (name || "").toUpperCase().replace(/[^A-Z0-9 ]/g, "").replace(/\s+/g, " ").trim();
-}
-
 export default function GenerateInvoice() {
-  const { user } = useAuth(); 
+  const { user } = useAuth();
   const navigate = useNavigate();
   const queryClient = useQueryClient();
   const [uploading, setUploading] = useState(false);
@@ -54,6 +52,8 @@ export default function GenerateInvoice() {
   const [fileUrl, setFileUrl] = useState("");
   const [matchedVendor, setMatchedVendor] = useState(null);
   const [vendorError, setVendorError] = useState("");
+  const [extractedVendorName, setExtractedVendorName] = useState("");
+  const [extractedVendorAddress, setExtractedVendorAddress] = useState("");
 
   const [form, setForm] = useState({
     customer_name: "", customer_mobile: "", customer_address: "",
@@ -91,6 +91,8 @@ export default function GenerateInvoice() {
     setVendorError("");
     setMatchedVendor(null);
     setExtracted(false);
+    setExtractedVendorName("");
+    setExtractedVendorAddress("");
 
     try {
       setExtracting(true);
@@ -104,43 +106,59 @@ export default function GenerateInvoice() {
 
       if (result.status === "success" && result.output) {
         const d = result.output;
-        const extractedName = normalizeName(d.vendor_name);
+
+        // ── Vendor matching: compare by vendor code stored in `address` field ──
+        const extractedCode = (d.vendor_code || "").trim().toUpperCase();
         let foundVendor = null;
-        if (extractedName) {
-          foundVendor = vendors.find(v => {
-            const savedName = normalizeName(v.vendor_name);
-            return savedName === extractedName || extractedName.includes(savedName) || savedName.includes(extractedName);
-          });
+
+        if (extractedCode) {
+          foundVendor = vendors.find(v =>
+            (v.address || "").trim().toUpperCase() === extractedCode
+          );
         }
+
+        // Always store the name & address from the PDF regardless of match
+        setExtractedVendorName(d.vendor_name || "");
+        setExtractedVendorAddress(d.vendor_address || "");
 
         if (foundVendor) {
           setMatchedVendor(foundVendor);
           setVendorError("");
         } else {
           setMatchedVendor(null);
-          setVendorError(`Vendor "${d.vendor_name || 'Unknown'}" not found in settings.`);
+          setVendorError(
+            `Vendor code "${extractedCode || "not found"}" is not saved in Settings. ` +
+            `Please add this vendor with code "${extractedCode}" in Settings first.`
+          );
         }
 
+        // ── Duplicate IMEI check ──
         if (d.imei_serial) {
-          const duplicate = invoices.find(inv => inv.imei_serial?.trim() === d.imei_serial.trim());
+          const duplicate = invoices.find(inv =>
+            inv.imei_serial?.trim() === d.imei_serial.trim()
+          );
           if (duplicate) {
-            toast.error(`Duplicate: Invoice ${duplicate.invoice_number} already exists for IMEI ${d.imei_serial}`);
+            toast.error(
+              `Duplicate: Invoice ${duplicate.invoice_number} already exists for IMEI ${d.imei_serial}`
+            );
             return;
           }
         }
 
+        // ── Fill form ──
         setForm(prev => ({
           ...prev,
-          customer_name: d.customer_name || prev.customer_name,
-          customer_mobile: d.customer_mobile || prev.customer_mobile,
-          customer_address: d.customer_address || prev.customer_address,
-          product_description: d.manufacturer || d.category || prev.product_description, 
-          product_model: d.model || prev.product_model,
-          imei_serial: d.imei_serial || prev.imei_serial,
-          product_price: d.product_price ? String(d.product_price) : prev.product_price,
-          invoice_date: parseDeliveryDate(d.delivery_date),
+          customer_name:        d.customer_name        || prev.customer_name,
+          customer_mobile:      d.customer_mobile      || prev.customer_mobile,
+          customer_address:     d.customer_address     || prev.customer_address,
+          product_description:  d.manufacturer || d.category || prev.product_description,
+          product_model:        d.model                || prev.product_model,
+          imei_serial:          d.imei_serial          || prev.imei_serial,
+          product_price:        d.product_price ? String(d.product_price) : prev.product_price,
+          invoice_date:         parseDeliveryDate(d.delivery_date),
           delivery_order_number: d.delivery_order_number || prev.delivery_order_number,
         }));
+
         setExtracted(true);
         toast.success("Data extracted successfully!");
       } else {
@@ -155,38 +173,43 @@ export default function GenerateInvoice() {
 
   const handleGenerate = () => {
     if (!matchedVendor) { toast.error("Please match a vendor in Settings first."); return; }
-    if (!form.customer_name || !form.product_price) { toast.error("Customer name and product price are required"); return; }
+    if (!form.customer_name || !form.product_price) {
+      toast.error("Customer name and product price are required");
+      return;
+    }
 
-    const price = parseFloat(form.product_price);
-    const rate = Math.round(price * 0.8475 * 100) / 100;
-    const cgst = Math.round(price * 0.0763 * 100) / 100;
-    const sgst = Math.round(price * 0.0763 * 100) / 100;
+    const price  = parseFloat(form.product_price);
+    const rate   = Math.round(price * 0.8475 * 100) / 100;
+    const cgst   = Math.round(price * 0.0763 * 100) / 100;
+    const sgst   = Math.round(price * 0.0763 * 100) / 100;
     const invoiceNumber = getNextInvoiceNumber(invoices, form.invoice_date);
 
     createMutation.mutate({
-      invoice_number: invoiceNumber,
-      invoice_date: form.invoice_date,
-      vendor_id: matchedVendor.id,
-      customer_name: form.customer_name,
-      customer_mobile: form.customer_mobile,
-      customer_address: form.customer_address,
-      mode: form.mode,
-      product_description: form.product_description,
-      product_model: form.product_model,
-      imei_serial: form.imei_serial,
-      quantity: 1,
-      product_price: price,
+      invoice_number:         invoiceNumber,
+      invoice_date:           form.invoice_date,
+      vendor_id:              matchedVendor.id,
+      vendor_name:            extractedVendorName,
+      vendor_address:         extractedVendorAddress,
+      customer_name:          form.customer_name,
+      customer_mobile:        form.customer_mobile,
+      customer_address:       form.customer_address,
+      mode:                   form.mode,
+      product_description:    form.product_description,
+      product_model:          form.product_model,
+      imei_serial:            form.imei_serial,
+      quantity:               1,
+      product_price:          price,
       rate, cgst, sgst,
-      grand_total: price,
-      delivery_order_url: fileUrl,
-      delivery_order_number: form.delivery_order_number,
+      grand_total:            price,
+      delivery_order_url:     fileUrl,
+      delivery_order_number:  form.delivery_order_number,
     });
   };
 
   const price = parseFloat(form.product_price) || 0;
-  const rate = Math.round(price * 0.8475 * 100) / 100;
-  const cgst = Math.round(price * 0.0763 * 100) / 100;
-  const sgst = Math.round(price * 0.0763 * 100) / 100;
+  const rate  = Math.round(price * 0.8475 * 100) / 100;
+  const cgst  = Math.round(price * 0.0763 * 100) / 100;
+  const sgst  = Math.round(price * 0.0763 * 100) / 100;
   const noVendors = !loadingVendors && vendors.length === 0;
 
   return (
@@ -201,7 +224,9 @@ export default function GenerateInvoice() {
           <CardContent className="p-4 flex items-center justify-between">
             <div className="flex items-center gap-2">
               <AlertCircle className="w-4 h-4 text-destructive" />
-              <p className="text-sm text-destructive font-medium">No vendors saved. Please add a vendor in Settings first.</p>
+              <p className="text-sm text-destructive font-medium">
+                No vendors saved. Please add a vendor in Settings first.
+              </p>
             </div>
             <Link to="/settings"><Button size="sm" variant="destructive">Go to Settings</Button></Link>
           </CardContent>
@@ -227,23 +252,35 @@ export default function GenerateInvoice() {
 
       <Card>
         <CardHeader>
-          <CardTitle className="text-lg flex items-center gap-2"><Upload className="w-5 h-5" />Upload Delivery Order</CardTitle>
+          <CardTitle className="text-lg flex items-center gap-2">
+            <Upload className="w-5 h-5" />Upload Delivery Order
+          </CardTitle>
           <CardDescription>Upload a PDF or image of the delivery order to auto-extract all details</CardDescription>
         </CardHeader>
         <CardContent>
           <label className="cursor-pointer block">
-            <input type="file" accept=".pdf,.png,.jpg,.jpeg" className="hidden" onChange={handleFileUpload} disabled={uploading || extracting} />
+            <input
+              type="file"
+              accept=".pdf,.png,.jpg,.jpeg"
+              className="hidden"
+              onChange={handleFileUpload}
+              disabled={uploading || extracting}
+            />
             <div className="border-2 border-dashed border-border rounded-xl p-8 text-center hover:border-primary/50 hover:bg-primary/5 transition-all">
               {uploading || extracting ? (
                 <div className="flex flex-col items-center gap-2">
                   <Loader2 className="w-8 h-8 text-primary animate-spin" />
-                  <p className="text-sm text-muted-foreground">{uploading ? "Uploading file..." : "Extracting data with AI..."}</p>
+                  <p className="text-sm text-muted-foreground">
+                    {uploading ? "Uploading file..." : "Extracting data with AI..."}
+                  </p>
                 </div>
               ) : extracted ? (
                 <div className="flex flex-col items-center gap-2">
                   <CheckCircle2 className="w-8 h-8 text-green-600" />
                   <p className="text-sm text-green-600 font-medium">
-                    {matchedVendor ? `Vendor matched: ${matchedVendor.vendor_name}` : "Data extracted, but vendor not matched"}
+                    {matchedVendor
+                      ? `Vendor matched: ${(matchedVendor.address || "").toUpperCase()}`
+                      : "Data extracted, but vendor not matched"}
                   </p>
                   <p className="text-xs text-muted-foreground">Click to upload a different file</p>
                 </div>
@@ -271,8 +308,10 @@ export default function GenerateInvoice() {
                 <CheckCircle2 className="w-4 h-4 text-green-600 shrink-0" />
                 <div className="text-sm">
                   <span className="text-green-700 dark:text-green-400 font-medium">Vendor matched: </span>
-                  <span className="text-green-800 dark:text-green-300 font-bold">{matchedVendor.vendor_name}</span>
-                  <span className="text-green-600 dark:text-green-500 ml-2 text-xs">GSTIN: {matchedVendor.gstin}</span>
+                  <span className="text-green-800 dark:text-green-300 font-bold font-mono">{(matchedVendor.address || "").toUpperCase()}</span>
+                  <span className="text-green-600 dark:text-green-500 ml-2 text-xs">
+                    GSTIN: {matchedVendor.gstin}
+                  </span>
                 </div>
               </div>
             ) : (
@@ -280,42 +319,92 @@ export default function GenerateInvoice() {
                 <AlertCircle className="w-4 h-4 text-amber-600 shrink-0" />
                 <div className="text-sm">
                   <span className="text-amber-700 dark:text-amber-400 font-medium">Action Required: </span>
-                  <span className="text-amber-800 dark:text-amber-300">No vendor matched. Please add the vendor in settings first.</span>
+                  <span className="text-amber-800 dark:text-amber-300">
+                    No vendor matched by code. Please add the vendor in Settings.
+                  </span>
                 </div>
               </div>
             )}
 
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <div className="space-y-2"><Label>Customer Name *</Label><Input value={form.customer_name} onChange={e => setForm(p => ({ ...p, customer_name: e.target.value }))} /></div>
-              <div className="space-y-2"><Label>Mobile No.</Label><Input value={form.customer_mobile} onChange={e => setForm(p => ({ ...p, customer_mobile: e.target.value }))} /></div>
+              <div className="space-y-2">
+                <Label>Customer Name *</Label>
+                <Input value={form.customer_name} onChange={e => setForm(p => ({ ...p, customer_name: e.target.value }))} />
+              </div>
+              <div className="space-y-2">
+                <Label>Mobile No.</Label>
+                <Input value={form.customer_mobile} onChange={e => setForm(p => ({ ...p, customer_mobile: e.target.value }))} />
+              </div>
             </div>
-            <div className="space-y-2"><Label>Customer Address</Label><Input value={form.customer_address} onChange={e => setForm(p => ({ ...p, customer_address: e.target.value }))} /></div>
+            <div className="space-y-2">
+              <Label>Customer Address</Label>
+              <Input value={form.customer_address} onChange={e => setForm(p => ({ ...p, customer_address: e.target.value }))} />
+            </div>
             <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-              <div className="space-y-2"><Label>Mode</Label><Input value={form.mode} onChange={e => setForm(p => ({ ...p, mode: e.target.value }))} /></div>
-              <div className="space-y-2"><Label>Invoice Date</Label><Input type="date" value={form.invoice_date} onChange={e => setForm(p => ({ ...p, invoice_date: e.target.value }))} /></div>
-              <div className="space-y-2"><Label>Product Price (₹) *</Label><Input type="number" value={form.product_price} onChange={e => setForm(p => ({ ...p, product_price: e.target.value }))} /></div>
+              <div className="space-y-2">
+                <Label>Mode</Label>
+                <Input value={form.mode} onChange={e => setForm(p => ({ ...p, mode: e.target.value }))} />
+              </div>
+              <div className="space-y-2">
+                <Label>Invoice Date</Label>
+                <Input type="date" value={form.invoice_date} onChange={e => setForm(p => ({ ...p, invoice_date: e.target.value }))} />
+              </div>
+              <div className="space-y-2">
+                <Label>Product Price (₹) *</Label>
+                <Input type="number" value={form.product_price} onChange={e => setForm(p => ({ ...p, product_price: e.target.value }))} />
+              </div>
             </div>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <div className="space-y-2"><Label>Product Description</Label><Input value={form.product_description} onChange={e => setForm(p => ({ ...p, product_description: e.target.value }))} /></div>
-              <div className="space-y-2"><Label>Model</Label><Input value={form.product_model} onChange={e => setForm(p => ({ ...p, product_model: e.target.value }))} /></div>
+              <div className="space-y-2">
+                <Label>Product Description</Label>
+                <Input value={form.product_description} onChange={e => setForm(p => ({ ...p, product_description: e.target.value }))} />
+              </div>
+              <div className="space-y-2">
+                <Label>Model</Label>
+                <Input value={form.product_model} onChange={e => setForm(p => ({ ...p, product_model: e.target.value }))} />
+              </div>
             </div>
-            <div className="space-y-2"><Label>IMEI / Serial Number</Label><Input value={form.imei_serial} onChange={e => setForm(p => ({ ...p, imei_serial: e.target.value }))} /></div>
-            <div className="space-y-2"><Label>Application ID</Label><Input value={form.delivery_order_number} onChange={e => setForm(p => ({ ...p, delivery_order_number: e.target.value }))} placeholder="e.g. CDAP1234567X12345678" /></div>
+            <div className="space-y-2">
+              <Label>IMEI / Serial Number</Label>
+              <Input value={form.imei_serial} onChange={e => setForm(p => ({ ...p, imei_serial: e.target.value }))} />
+            </div>
+            <div className="space-y-2">
+              <Label>Application ID</Label>
+              <Input
+                value={form.delivery_order_number}
+                onChange={e => setForm(p => ({ ...p, delivery_order_number: e.target.value }))}
+                placeholder="e.g. CDAP000127B01217641"
+              />
+            </div>
 
             {price > 0 && (
               <div className="bg-accent/50 rounded-xl p-4 space-y-2">
                 <p className="text-sm font-semibold text-foreground">Calculation Preview</p>
                 <div className="grid grid-cols-2 md:grid-cols-4 gap-3 text-sm">
-                  <div><p className="text-muted-foreground text-xs">Rate (84.75%)</p><p className="font-semibold">₹{rate.toLocaleString("en-IN", { minimumFractionDigits: 2 })}</p></div>
-                  <div><p className="text-muted-foreground text-xs">CGST (7.63%)</p><p className="font-semibold">₹{cgst.toLocaleString("en-IN", { minimumFractionDigits: 2 })}</p></div>
-                  <div><p className="text-muted-foreground text-xs">SGST (7.63%)</p><p className="font-semibold">₹{sgst.toLocaleString("en-IN", { minimumFractionDigits: 2 })}</p></div>
-                  <div><p className="text-muted-foreground text-xs">Grand Total</p><p className="font-bold text-primary">₹{price.toLocaleString("en-IN", { minimumFractionDigits: 2 })}</p></div>
+                  <div>
+                    <p className="text-muted-foreground text-xs">Rate (84.75%)</p>
+                    <p className="font-semibold">₹{rate.toLocaleString("en-IN", { minimumFractionDigits: 2 })}</p>
+                  </div>
+                  <div>
+                    <p className="text-muted-foreground text-xs">CGST (7.63%)</p>
+                    <p className="font-semibold">₹{cgst.toLocaleString("en-IN", { minimumFractionDigits: 2 })}</p>
+                  </div>
+                  <div>
+                    <p className="text-muted-foreground text-xs">SGST (7.63%)</p>
+                    <p className="font-semibold">₹{sgst.toLocaleString("en-IN", { minimumFractionDigits: 2 })}</p>
+                  </div>
+                  <div>
+                    <p className="text-muted-foreground text-xs">Grand Total</p>
+                    <p className="font-bold text-primary">₹{price.toLocaleString("en-IN", { minimumFractionDigits: 2 })}</p>
+                  </div>
                 </div>
               </div>
             )}
 
             <Button onClick={handleGenerate} disabled={createMutation.isPending} className="gap-2 w-full md:w-auto">
-              {createMutation.isPending ? <Loader2 className="w-4 h-4 animate-spin" /> : <FileText className="w-4 h-4" />}
+              {createMutation.isPending
+                ? <Loader2 className="w-4 h-4 animate-spin" />
+                : <FileText className="w-4 h-4" />}
               Generate Invoice
             </Button>
           </CardContent>

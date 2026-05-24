@@ -1,5 +1,5 @@
 async function loadPdfJs() {
-  if (window.pdfjsLib) return windowPdfjsLib;
+  if (window.pdfjsLib) return window.pdfjsLib;
   await new Promise((resolve, reject) => {
     const script = document.createElement("script");
     script.src = "https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js";
@@ -18,7 +18,8 @@ export async function extractDataFromFile(file) {
     return {
       status: "success",
       output: {
-        vendor_name: null, delivery_order_number: null, delivery_date: null,
+        vendor_code: null, vendor_name: null, vendor_address: null,
+        delivery_order_number: null, delivery_date: null,
         customer_name: null, customer_mobile: null, customer_address: null,
         manufacturer: null, category: null, model: null,
         imei_serial: null, product_price: null,
@@ -38,13 +39,12 @@ export async function extractDataFromFile(file) {
     const pdf = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
     let fullText = "";
     let lines = [];
-    
+
     for (let i = 1; i <= pdf.numPages; i++) {
       const page = await pdf.getPage(i);
       const content = await page.getTextContent();
       const pageText = content.items.map((item) => item.str).join(" ");
       fullText += pageText + "\n";
-      // We also keep a version of the text split by what pdf.js considers "lines"
       lines.push(...content.items.map(item => item.str.trim()).filter(s => s.length > 0));
     }
 
@@ -67,40 +67,78 @@ function parseDeliveryOrderText(text, lines) {
     return match ? match[1].trim() : null;
   };
 
-  // --- 1. VENDOR NAME (Precision Line-Based Logic) ---
+  // --- 1. VENDOR CODE, VENDOR NAME, VENDOR ADDRESS (Precision Line-Based Logic) ---
+  // Structure after "To:":
+  //   Line 0: To:
+  //   Line 1: CDAP000127         <-- vendor_code
+  //   Line 2: M/S SRI LAKSHMI MOBILES  <-- vendor_name
+  //   Line 3+: address lines     <-- vendor_address (until a known section break)
+  let vendor_code = null;
   let vendor_name = null;
-  // Find the "To:" label
+  let vendor_address = null;
+
   const toIdx = lines.findIndex(l => l.toUpperCase().includes("TO:"));
   if (toIdx >= 0) {
-    // The layout is usually: 
-    // Line 0: To:
-    // Line 1: CDAP... (Application ID)
-    // Line 2: VENDOR NAME
-    // Line 3: Address...
-    
-    // Search the next 5 lines for the first line that is NOT the CDAP ID and NOT empty
+    // Find vendor_code: first line after "To:" matching CDAP pattern
+    let codeIdx = -1;
     for (let i = toIdx + 1; i < lines.length && i < toIdx + 6; i++) {
-      const line = lines[i].trim();
-      if (!line) continue;
-      if (/^CDAP\d+$/i.test(line)) continue; // Skip the ID line
-      
-      // This is the vendor name. 
-      // We take the text and split it at the first comma (where address usually starts)
-      vendor_name = line.split(',')[0].trim();
-      break;
+      if (/^CDAP\d+$/i.test(lines[i].trim())) {
+        vendor_code = lines[i].trim().toUpperCase();
+        codeIdx = i;
+        break;
+      }
+    }
+
+    if (codeIdx >= 0) {
+      // vendor_name: next non-empty line after vendor_code
+      let nameIdx = -1;
+      for (let i = codeIdx + 1; i < lines.length && i < codeIdx + 4; i++) {
+        const line = lines[i].trim();
+        if (!line) continue;
+        vendor_name = line;
+        nameIdx = i;
+        break;
+      }
+
+      // vendor_address: lines after vendor_name until we hit a date pattern,
+      // "We hereby", or another known section marker
+      if (nameIdx >= 0) {
+        const addressLines = [];
+        for (let i = nameIdx + 1; i < lines.length && i < nameIdx + 8; i++) {
+          const line = lines[i].trim();
+          if (!line) continue;
+          // Stop at section breaks
+          if (
+            /^(We hereby|Date:|Please note|CUSTOMER|PRODUCT)/i.test(line) ||
+            /^\d{1,2}[-\/]\d{1,2}[-\/]\d{2,4}/.test(line)
+          ) break;
+          addressLines.push(line);
+        }
+        if (addressLines.length > 0) {
+          vendor_address = addressLines.join(", ");
+        }
+      }
     }
   }
 
-  // --- 2. DELIVERY DATE (Fuzzy Regex) ---
+  // Fallback: extract vendor_code from text if line-based failed
+  if (!vendor_code) {
+    const codeMatch = cleanText.match(/\b(CDAP\d{6,})\b/i);
+    if (codeMatch) vendor_code = codeMatch[1].toUpperCase();
+  }
+
+  // --- 2. DELIVERY DATE ---
   let delivery_date = null;
-  const dateMatch = cleanText.match(/Date:\s*(\d{1,2}[-\/\.]\d{1,2}[-\/\.]\s*\d{2,4})/i);
+  const dateMatch = cleanText.match(/Date:\s*(\d{1,2}[-\/\.]\s*\d{1,2}[-\/\.]\s*\d{2,4})/i);
   if (dateMatch) {
     delivery_date = dateMatch[1].replace(/\s+/g, "");
   }
 
-  // --- 3. APPLICATION ID ---
-  const delivery_order_number = extract(/Application\s*ID:\s*([A-Z0-9]+)/i) || 
-                                extract(/\b(CDAP[A-Z0-9]{10,})\b/i);
+  // --- 3. APPLICATION ID (full CDAP...B... string) ---
+  // The short vendor code is CDAP000127; the Application ID is the longer CDAP000127B01217641
+  const delivery_order_number =
+    extract(/Application\s*ID:\s*([A-Z0-9]+)/i) ||
+    extract(/\b(CDAP[A-Z0-9]{10,})\b/i);
 
   // --- 4. CUSTOMER DETAILS ---
   const customer_name = extract(/Customer\s*Name:\s*(.+?)\s*Mobile:/i);
@@ -114,11 +152,14 @@ function parseDeliveryOrderText(text, lines) {
   const imei_serial = extract(/IMEI\/Serial\s*Number:\s*(\d{10,20})/i);
 
   // --- 6. PRICE ---
-  const priceMatch = cleanText.match(/Product\s*Price\s*[:\-]?\s*(?:Rs\.?\s*)?(\d[\d,]*)/i);
+  const priceMatch = cleanText.match(/Product\s*Price\s*[:\-]?\s*(?:Rs\.?\s*)?(\d[\d,]*)/i) ||
+                     cleanText.match(/A\.\s*Product\s*Price\s+(\d[\d,]+)/i);
   const product_price = priceMatch ? parseFloat(priceMatch[1].replace(/,/g, "")) : null;
 
   return {
+    vendor_code,
     vendor_name,
+    vendor_address,
     delivery_order_number,
     delivery_date,
     customer_name,

@@ -15,14 +15,13 @@ import {
   AlertDialogTitle, AlertDialogTrigger
 } from "@/components/ui/alert-dialog";
 
-// The natural pixel width InvoiceTemplate was designed for (A4 @ 96dpi)
 const INVOICE_NATURAL_WIDTH = 794;
 
 export default function InvoiceView() {
   const { id: invoiceId } = useParams();
-  const invoiceRef   = useRef(null); // unscaled — used for download capture
-  const scaleWrapRef = useRef(null); // the element we apply CSS transform to
-  const viewportRef  = useRef(null); // outer scrollable container
+  const invoiceRef   = useRef(null);
+  const scaleWrapRef = useRef(null);
+  const viewportRef  = useRef(null);
   const navigate     = useNavigate();
   const queryClient  = useQueryClient();
 
@@ -31,32 +30,25 @@ export default function InvoiceView() {
   const [invoiceHeight, setInvoiceHeight] = useState(0);
   const [isCapturing, setIsCapturing]     = useState(false);
 
-  // Measure the natural invoice height after render so we can size the layout wrapper.
-  // Empty deps: ResizeObserver handles re-measurement whenever content changes.
   useEffect(() => {
     if (!invoiceRef.current) return;
-
     const measure = () => {
       const el = invoiceRef.current;
       if (el) setInvoiceHeight(el.offsetHeight);
     };
-
     measure();
-
     const ro = new ResizeObserver(measure);
     ro.observe(invoiceRef.current);
     return () => ro.disconnect();
   }, []);
 
-  // Compute zoom that fits the invoice within the viewport width
   const computeFitZoom = useCallback(() => {
     if (!viewportRef.current) return;
-    const available = viewportRef.current.clientWidth - 32; // 16px padding × 2
+    const available = viewportRef.current.clientWidth - 32;
     const fit = Math.min(1, parseFloat((available / INVOICE_NATURAL_WIDTH).toFixed(2)));
     setZoom(fit);
   }, []);
 
-  // Auto-fit on mount + viewport resize
   useEffect(() => {
     computeFitZoom();
     const ro = new ResizeObserver(computeFitZoom);
@@ -73,7 +65,7 @@ export default function InvoiceView() {
     enabled: !!invoiceId,
   });
 
-  const { data: vendor, isLoading: loadingVendor } = useQuery({
+  const { data: vendorFromDB, isLoading: loadingVendor } = useQuery({
     queryKey: ["vendor", invoice?.vendor_id],
     queryFn: async () => {
       if (!invoice?.vendor_id) {
@@ -86,58 +78,49 @@ export default function InvoiceView() {
     enabled: !!invoice,
   });
 
+  // Build the vendor object that InvoiceTemplate will use:
+  // - gstin and stamp come from the DB record (set by user in Settings)
+  // - vendor_name and address come from the invoice record (extracted from PDF)
+  //   falling back to the DB record if not present
+  const vendor = vendorFromDB ? {
+    ...vendorFromDB,
+    vendor_name: invoice?.vendor_name || vendorFromDB.vendor_name,
+    address:     invoice?.vendor_address || vendorFromDB.address,
+  } : null;
+
   const handlePrint = () => window.print();
 
-  // Capture the unscaled invoice at its true natural size for downloads
   const captureFullInvoice = async (options = {}) => {
     const el = invoiceRef.current;
     if (!el) return null;
-
-    // Temporarily un-clip any overflow ancestors so html2canvas sees everything
     const saved = [];
     let node = el.parentElement;
     while (node && node !== document.body) {
       const cs = window.getComputedStyle(node);
       if (cs.overflow !== "visible" || cs.overflowX !== "visible" || cs.overflowY !== "visible") {
-        saved.push({
-          node,
-          overflow:  node.style.overflow,
-          overflowX: node.style.overflowX,
-          overflowY: node.style.overflowY,
-        });
-        node.style.overflow  = "visible";
+        saved.push({ node, overflow: node.style.overflow, overflowX: node.style.overflowX, overflowY: node.style.overflowY });
+        node.style.overflow = "visible";
         node.style.overflowX = "visible";
         node.style.overflowY = "visible";
       }
       node = node.parentElement;
     }
-
-    // Temporarily reset the CSS transform so capture is at 1:1
     const scaleEl = scaleWrapRef.current;
     const prevTransform = scaleEl?.style.transform ?? "";
     if (scaleEl) scaleEl.style.transform = "none";
-
     const canvas = await html2canvas(el, {
-      scale: 2,
-      useCORS: true,
-      allowTaint: true,
-      scrollX: 0,
-      scrollY: 0,
-      width:       el.scrollWidth,
-      height:      el.scrollHeight,
-      windowWidth: el.scrollWidth,
-      windowHeight: el.scrollHeight,
+      scale: 2, useCORS: true, allowTaint: true,
+      scrollX: 0, scrollY: 0,
+      width: el.scrollWidth, height: el.scrollHeight,
+      windowWidth: el.scrollWidth, windowHeight: el.scrollHeight,
       ...options,
     });
-
-    // Restore transform + overflow
     if (scaleEl) scaleEl.style.transform = prevTransform;
     saved.forEach(({ node, overflow, overflowX, overflowY }) => {
-      node.style.overflow  = overflow;
+      node.style.overflow = overflow;
       node.style.overflowX = overflowX;
       node.style.overflowY = overflowY;
     });
-
     return canvas;
   };
 
@@ -145,9 +128,9 @@ export default function InvoiceView() {
     if (!invoiceRef.current) return;
     setIsCapturing(true);
     try {
-      const canvas    = await captureFullInvoice();
-      const imgData   = canvas.toDataURL("image/png");
-      const pdf       = new jspdf("p", "mm", "a4");
+      const canvas  = await captureFullInvoice();
+      const imgData = canvas.toDataURL("image/png");
+      const pdf     = new jspdf("p", "mm", "a4");
       const pdfWidth  = pdf.internal.pageSize.getWidth();
       const pdfHeight = (canvas.height * pdfWidth) / canvas.width;
       pdf.addImage(imgData, "PNG", 0, 0, pdfWidth, pdfHeight);
@@ -200,12 +183,10 @@ export default function InvoiceView() {
       </div>
     );
 
-  // Scaled width for the layout placeholder (height grows naturally)
   const scaledWidth = INVOICE_NATURAL_WIDTH * zoom;
 
   return (
     <div className="space-y-4">
-      {/* ── Toolbar ── */}
       <div className="no-print flex items-center justify-between flex-wrap gap-2">
         <Link to="/invoices">
           <Button variant="ghost" size="sm" className="gap-2">
@@ -214,7 +195,6 @@ export default function InvoiceView() {
         </Link>
 
         <div className="flex flex-wrap gap-2 items-center">
-          {/* Invoice zoom */}
           <div className="flex items-center gap-1 border border-border rounded-lg px-2 py-1">
             <span className="text-xs text-muted-foreground mr-1">Zoom</span>
             <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => changeZoom(-0.1)}>
@@ -229,7 +209,6 @@ export default function InvoiceView() {
             </Button>
           </div>
 
-          {/* Stamp scale */}
           <div className="flex items-center gap-1 border border-border rounded-lg px-2 py-1">
             <span className="text-xs text-muted-foreground mr-1">Stamp</span>
             <Button variant="ghost" size="icon" className="h-7 w-7"
@@ -280,42 +259,15 @@ export default function InvoiceView() {
         </div>
       </div>
 
-      {/*
-        ── Viewport ──
-        Scrollable only when zoom makes the invoice wider than the screen.
-        Centers the invoice horizontally when there is surplus space.
-      */}
       <div
         ref={viewportRef}
         className="w-full overflow-auto rounded-lg"
         style={{ padding: "16px 16px 24px" }}
       >
-        {/*
-          Layout placeholder — only constrains width; height grows naturally
-          with the content so nothing gets clipped.
-        */}
-        <div
-          style={{
-            width:    scaledWidth,
-            minWidth: scaledWidth,
-            margin:   "0 auto",
-          }}
-        >
-          {/*
-            Scale wrapper: CSS transform scales the invoice visually.
-            position: relative (NOT absolute) keeps it in normal document flow
-            so the parent expands to contain the full invoice height.
-            transform-origin: top left keeps the math predictable.
-            The invoiceRef element inside is always at natural 1:1 size —
-            html2canvas resets this transform before capture.
-          */}
+        <div style={{ width: scaledWidth, minWidth: scaledWidth, margin: "0 auto" }}>
           <div
             ref={scaleWrapRef}
-            style={{
-              width:           INVOICE_NATURAL_WIDTH,
-              transformOrigin: "top left",
-              transform:       `scale(${zoom})`,
-            }}
+            style={{ width: INVOICE_NATURAL_WIDTH, transformOrigin: "top left", transform: `scale(${zoom})` }}
           >
             <div ref={invoiceRef} className="shadow-lg rounded-lg overflow-hidden">
               <InvoiceTemplate invoice={invoice} vendor={vendor} stampScale={stampScale} />
