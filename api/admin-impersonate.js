@@ -13,20 +13,13 @@ export default async function handler(req, res) {
   const SERVICE_KEY  = process.env.SUPABASE_SERVICE_ROLE_KEY;
 
   if (!SUPABASE_URL || !ANON_KEY || !SERVICE_KEY) {
-    return res.status(500).json({
-      error: "Missing environment variables",
-      has_url:     !!SUPABASE_URL,
-      has_anon:    !!ANON_KEY,
-      has_service: !!SERVICE_KEY,
-    });
+    return res.status(500).json({ error: "Missing environment variables" });
   }
 
   try {
     // 1. Decode JWT to get caller user ID
     const parts = admin_token.split(".");
-    if (parts.length !== 3) {
-      return res.status(401).json({ error: "Invalid token format" });
-    }
+    if (parts.length !== 3) return res.status(401).json({ error: "Invalid token format" });
 
     let payload;
     try {
@@ -38,15 +31,10 @@ export default async function handler(req, res) {
     }
 
     const callerId = payload?.sub;
-    if (!callerId) {
-      return res.status(401).json({ error: "No user ID in token" });
-    }
+    if (!callerId) return res.status(401).json({ error: "No user ID in token" });
+    if (payload.exp && Date.now() / 1000 > payload.exp) return res.status(401).json({ error: "Token expired" });
 
-    if (payload.exp && Date.now() / 1000 > payload.exp) {
-      return res.status(401).json({ error: "Token expired" });
-    }
-
-    // 2. Verify caller is admin using service role
+    // 2. Verify caller is admin
     const profileRes = await fetch(
       `${SUPABASE_URL}/rest/v1/profiles?id=eq.${callerId}&select=is_admin`,
       {
@@ -57,11 +45,9 @@ export default async function handler(req, res) {
       }
     );
     const profiles = await profileRes.json();
-    if (!profiles?.[0]?.is_admin) {
-      return res.status(403).json({ error: "Admin access required" });
-    }
+    if (!profiles?.[0]?.is_admin) return res.status(403).json({ error: "Admin access required" });
 
-    // 3. Get target user email first
+    // 3. Get target user email
     const userRes = await fetch(
       `${SUPABASE_URL}/auth/v1/admin/users/${target_user_id}`,
       {
@@ -71,14 +57,18 @@ export default async function handler(req, res) {
         },
       }
     );
-    const userData = await userRes.json();
+    const userText = await userRes.text();
+    let userData;
+    try { userData = JSON.parse(userText); } catch(e) {
+      return res.status(500).json({ error: "Failed to get user", raw: userText.slice(0, 200) });
+    }
     if (!userRes.ok || !userData?.email) {
       return res.status(404).json({ error: "Target user not found", detail: userData });
     }
 
-    // 4. Generate magic link using correct endpoint
+    // 4. Generate OTP link — correct Supabase endpoint
     const linkRes = await fetch(
-      `${SUPABASE_URL}/auth/v1/admin/generateLink`,
+      `${SUPABASE_URL}/auth/v1/admin/users/${target_user_id}/generate_link`,
       {
         method: "POST",
         headers: {
@@ -88,27 +78,35 @@ export default async function handler(req, res) {
         },
         body: JSON.stringify({
           type: "magiclink",
-          email: userData.email,
-          options: {
-            redirect_to: "https://sivacholainvoices.vercel.app/admin-callback",
-          },
+          redirect_to: "https://sivacholainvoices.vercel.app/admin-callback",
         }),
       }
     );
 
     const linkText = await linkRes.text();
     let linkData;
-    try {
-      linkData = JSON.parse(linkText);
-    } catch (e) {
-      return res.status(500).json({ error: "Invalid response from Supabase", raw: linkText.slice(0, 200) });
+    try { linkData = JSON.parse(linkText); } catch(e) {
+      return res.status(500).json({ error: "Invalid response", raw: linkText.slice(0, 200) });
     }
 
     if (!linkRes.ok) {
-      return res.status(500).json({ error: linkData.message || "Failed to generate link", detail: linkData });
+      return res.status(500).json({ error: linkData.message || "Failed", detail: linkData });
     }
 
-    return res.status(200).json({ link: linkData.action_link || linkData.properties?.action_link });
+    // action_link is the full URL including the token
+    const link = linkData.action_link || linkData.properties?.action_link;
+    if (!link) {
+      return res.status(500).json({ error: "No action_link in response", detail: linkData });
+    }
+
+    // Rewrite the action_link to redirect to our callback instead of Supabase's default
+    const url = new URL(link);
+    const token = url.searchParams.get("token");
+    const type  = url.searchParams.get("type");
+
+    const finalLink = `${SUPABASE_URL}/auth/v1/verify?token=${token}&type=${type}&redirect_to=https://sivacholainvoices.vercel.app/admin-callback`;
+
+    return res.status(200).json({ link: finalLink });
 
   } catch (err) {
     return res.status(500).json({ error: err.message });
