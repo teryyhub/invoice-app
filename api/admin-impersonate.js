@@ -1,4 +1,4 @@
-// api/admin-impersonate.js  (Vercel serverless function)
+// api/admin-impersonate.js
 export default async function handler(req, res) {
   if (req.method !== "POST") return res.status(405).end();
 
@@ -12,8 +12,17 @@ export default async function handler(req, res) {
   const ANON_KEY     = process.env.SUPABASE_ANON_KEY;
   const SERVICE_KEY  = process.env.SUPABASE_SERVICE_ROLE_KEY;
 
+  if (!SUPABASE_URL || !ANON_KEY || !SERVICE_KEY) {
+    return res.status(500).json({
+      error: "Missing environment variables",
+      has_url:     !!SUPABASE_URL,
+      has_anon:    !!ANON_KEY,
+      has_service: !!SERVICE_KEY,
+    });
+  }
+
   try {
-    // 1. Verify the caller's JWT and get their user ID
+    // 1. Verify the caller's JWT
     const verifyRes = await fetch(`${SUPABASE_URL}/auth/v1/user`, {
       headers: {
         Authorization: `Bearer ${admin_token}`,
@@ -25,7 +34,7 @@ export default async function handler(req, res) {
       return res.status(401).json({ error: "Invalid token" });
     }
 
-    // 2. Check they are an admin in profiles table
+    // 2. Check admin status
     const profileRes = await fetch(
       `${SUPABASE_URL}/rest/v1/profiles?id=eq.${callerUser.id}&select=is_admin`,
       {
@@ -40,7 +49,7 @@ export default async function handler(req, res) {
       return res.status(403).json({ error: "Admin access required" });
     }
 
-    // 3. Generate a real magic link via Supabase Admin API
+    // 3. Generate magic link via Supabase Admin API
     const linkRes = await fetch(
       `${SUPABASE_URL}/auth/v1/admin/users/${target_user_id}/generate_link`,
       {
