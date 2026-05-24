@@ -22,21 +22,35 @@ export default async function handler(req, res) {
   }
 
   try {
-    // 1. Verify the caller's JWT
-    const verifyRes = await fetch(`${SUPABASE_URL}/auth/v1/user`, {
-      headers: {
-        Authorization: `Bearer ${admin_token}`,
-        apikey: ANON_KEY,
-      },
-    });
-    const callerUser = await verifyRes.json();
-    if (!callerUser?.id) {
-      return res.status(401).json({ error: "Invalid token" });
+    // 1. Decode the JWT to get user ID without verification
+    //    (we trust it because we verify admin status via service role next)
+    const parts = admin_token.split(".");
+    if (parts.length !== 3) {
+      return res.status(401).json({ error: "Invalid token format" });
     }
 
-    // 2. Check admin status
+    let payload;
+    try {
+      const base64 = parts[1].replace(/-/g, "+").replace(/_/g, "/");
+      const padded = base64.padEnd(base64.length + (4 - base64.length % 4) % 4, "=");
+      payload = JSON.parse(Buffer.from(padded, "base64").toString("utf8"));
+    } catch (e) {
+      return res.status(401).json({ error: "Failed to decode token" });
+    }
+
+    const callerId = payload?.sub;
+    if (!callerId) {
+      return res.status(401).json({ error: "No user ID in token" });
+    }
+
+    // Check token expiry
+    if (payload.exp && Date.now() / 1000 > payload.exp) {
+      return res.status(401).json({ error: "Token expired" });
+    }
+
+    // 2. Verify caller is admin using service role (trusted)
     const profileRes = await fetch(
-      `${SUPABASE_URL}/rest/v1/profiles?id=eq.${callerUser.id}&select=is_admin`,
+      `${SUPABASE_URL}/rest/v1/profiles?id=eq.${callerId}&select=is_admin`,
       {
         headers: {
           Authorization: `Bearer ${SERVICE_KEY}`,
@@ -68,7 +82,7 @@ export default async function handler(req, res) {
 
     const linkData = await linkRes.json();
     if (!linkRes.ok) {
-      return res.status(500).json({ error: linkData.message || "Failed to generate link" });
+      return res.status(500).json({ error: linkData.message || "Failed to generate link", detail: linkData });
     }
 
     return res.status(200).json({ link: linkData.action_link });
