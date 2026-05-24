@@ -182,7 +182,7 @@ function EditVendorForm({ initial, onSave, onCancel, isSaving }) {
         <Input
           value={form.vendor_name}
           onChange={e => setForm(p => ({ ...p, vendor_name: e.target.value }))}
-          placeholder="e.g. M/S SRI LAKSHMI MOBILES"
+          placeholder=" "
         />
       </div>
 
@@ -194,7 +194,7 @@ function EditVendorForm({ initial, onSave, onCancel, isSaving }) {
         <Textarea
           value={form.vendor_address}
           onChange={e => setForm(p => ({ ...p, vendor_address: e.target.value }))}
-          placeholder="e.g. 12-3, MG Road, Warangal - 506002"
+          placeholder=" 
           rows={2}
           className="resize-none"
         />
