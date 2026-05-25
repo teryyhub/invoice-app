@@ -149,7 +149,7 @@ function parseDeliveryOrderText(text, lines) {
   const manufacturer = extract(/Manufacturer:\s*([A-Z0-9\s]+?)\s*Category:/i);
   const category = extract(/Category:\s*([A-Z0-9\s]+?)\s*Model:/i);
   const model = extract(/Model:\s*(.+?)\s*IMEI\/Serial/i);
-  const imei_serial = extract(/IMEI\/Serial\s*Number:\s*(\d{10,20})/i);
+  const imei_serial = extract(/IMEI\/Serial\s*Number:\s*([\w\/\-]{5,30})/i);
 
   // --- 6. PRICE ---
   const priceMatch = cleanText.match(/Product\s*Price\s*[:\-]?\s*(?:Rs\.?\s*)?(\d[\d,]*)/i) ||
