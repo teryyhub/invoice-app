@@ -7,21 +7,23 @@ import PageNotFound from "./lib/PageNotFound";
 import { AuthProvider, useAuth } from "@/lib/AuthContext";
 import { ThemeProvider } from "@/lib/ThemeProvider";
 
-import AppLayout         from "./components/layout/AppLayout";
-import Dashboard         from "./pages/Dashboard";
-import GenerateInvoice   from "./pages/GenerateInvoice";
-import InvoiceList       from "./pages/InvoiceList";
-import InvoiceView       from "./pages/InvoiceView";
-import VendorSettings    from "./pages/VendorSettings";
-import Reports           from "./pages/Reports";
-import Customers         from "./pages/Customers";
-import ProfileSettings   from "./pages/ProfileSettings";
-import Statistics        from "./pages/Statistics";
-import Login             from "./pages/Login";
-import VerifyOtp         from "./pages/VerifyOtp";
-import ResetPassword     from "./pages/ResetPassword";
-import AdminPanel        from "./pages/AdminPanel";
-import AuthAdminCallback from "./pages/AuthAdminCallback";
+import AppLayout              from "./components/layout/AppLayout";
+import Dashboard              from "./pages/Dashboard";
+import GenerateInvoice        from "./pages/GenerateInvoice";
+import InvoiceList            from "./pages/InvoiceList";
+import InvoiceView            from "./pages/InvoiceView";
+import VendorSettings         from "./pages/VendorSettings";
+import Reports                from "./pages/Reports";
+import Customers              from "./pages/Customers";
+import ProfileSettings        from "./pages/ProfileSettings";
+import Statistics             from "./pages/Statistics";
+import Login                  from "./pages/Login";
+import VerifyOtp              from "./pages/VerifyOtp";
+import ResetPassword          from "./pages/ResetPassword";
+import AdminPanel             from "./pages/AdminPanel";
+import AuthAdminCallback      from "./pages/AuthAdminCallback";
+import CustomerPortalLogin    from "./pages/CustomerPortalLogin";
+import CustomerPortal         from "./pages/CustomerPortal";
 
 const AuthenticatedApp = () => {
   const { isLoadingAuth, user } = useAuth();
@@ -67,7 +69,12 @@ function App() {
               <Route path="/verify"         element={<VerifyOtp />} />
               <Route path="/reset-password" element={<ResetPassword />} />
               <Route path="/admin-callback" element={<AuthAdminCallback />} />
-              {/* Authenticated routes */}
+
+              {/* Customer portal — separate auth, no admin login needed */}
+              <Route path="/portal"           element={<CustomerPortalLogin />} />
+              <Route path="/portal/dashboard" element={<CustomerPortal />} />
+
+              {/* Authenticated admin/staff routes */}
               <Route path="/*" element={<AuthenticatedApp />} />
             </Routes>
           </Router>
