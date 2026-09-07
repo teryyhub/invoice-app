@@ -4,11 +4,17 @@ export default {
   content: ["./index.html", "./src/**/*.{js,ts,jsx,tsx}"],
   theme: {
     extend: {
+      fontFamily: {
+        sans: ["'Plus Jakarta Sans'", "system-ui", "-apple-system", "sans-serif"],
+        mono: ["'JetBrains Mono'", "ui-monospace", "monospace"],
+      },
       fontSize: {
-        // Relative micro-typography tokens scaling directly with the user's OS/browser font setting
-        "3xs": ["0.5625rem", { lineHeight: "0.75rem" }],  // ~9px equivalent at standard 16px base
-        "2xs": ["0.625rem", { lineHeight: "0.875rem" }],  // ~10px equivalent at standard 16px base
-        "xs+": ["0.6875rem", { lineHeight: "1rem" }],     // ~11px equivalent at standard 16px base
+        "3xs": ["0.6875rem", { lineHeight: "0.9375rem" }], // ~11px
+        "2xs": ["0.75rem",   { lineHeight: "1.0625rem" }], // ~12px
+        "xs+": ["0.8125rem", { lineHeight: "1.1875rem" }], // ~13px
+        "xs":  ["0.875rem",  { lineHeight: "1.25rem" }],   // ~14px
+        "sm":  ["0.9375rem", { lineHeight: "1.375rem" }],  // ~15px
+        "base":["1.0625rem", { lineHeight: "1.5rem" }],    // ~17px
       },
       borderRadius: {
         lg: "var(--radius)",

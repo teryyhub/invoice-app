@@ -50,11 +50,8 @@ export default function InvoiceView() {
     const el = containerNodeRef.current;
     if (!el) return;
 
-    // Use getBoundingClientRect for sub-pixel accuracy before scrollbars appear
     const rect = el.getBoundingClientRect();
     const containerWidth = rect.width || el.clientWidth || window.innerWidth;
-
-    // Safety buffer of 16px (8px padding each side)
     const availableWidth = containerWidth - 16;
 
     if (availableWidth > 0 && availableWidth < INVOICE_NATURAL_WIDTH) {
@@ -65,20 +62,16 @@ export default function InvoiceView() {
     }
   }, []);
 
-  // Callback ref: Fires the very moment the viewport container is inserted into the DOM
   const setContainerRef = useCallback((node) => {
     containerNodeRef.current = node;
     if (node) {
-      // Immediate calculation
       handleAutoFit();
-      // Double check in next rendering microtask
       requestAnimationFrame(() => handleAutoFit());
       setTimeout(() => handleAutoFit(), 60);
       setTimeout(() => handleAutoFit(), 200);
     }
   }, [handleAutoFit]);
 
-  // Window resize listener
   useEffect(() => {
     window.addEventListener("resize", handleAutoFit, { passive: true });
     return () => window.removeEventListener("resize", handleAutoFit);
@@ -110,7 +103,6 @@ export default function InvoiceView() {
     refetchOnWindowFocus: false,
   });
 
-  // Re-calculate when invoice data finishes loading
   useEffect(() => {
     if (!loadingInvoice && !loadingVendor && invoice) {
       requestAnimationFrame(() => handleAutoFit());
@@ -224,7 +216,7 @@ export default function InvoiceView() {
       <div className="text-center py-8">
         <p className="text-xs text-muted-foreground">Invoice not found</p>
         <Link to="/invoices">
-          <Button variant="outline" size="sm" className="mt-2 h-7 text-xs">
+          <Button variant="outline" size="sm" className="mt-2 h-8 text-xs">
             Back to Invoices
           </Button>
         </Link>
@@ -233,81 +225,83 @@ export default function InvoiceView() {
   }
 
   return (
-    <div className="space-y-2 max-w-5xl mx-auto">
+    <div className="space-y-2.5 max-w-5xl mx-auto">
       {/* Top Toolbar */}
-      <div className="no-print flex items-center justify-between flex-wrap gap-1.5 border-b border-border/60 pb-1.5">
-        <div className="flex items-center gap-1.5">
+      <div className="no-print flex items-center justify-between flex-wrap gap-2 border-b border-border/60 pb-2">
+        <div className="flex items-center gap-2">
           <Link to="/invoices">
-            <Button variant="ghost" size="sm" className="h-7 px-1.5 text-xs gap-1">
-              <ArrowLeft className="w-3.5 h-3.5" />
+            <Button variant="ghost" size="sm" className="h-8 px-2 text-xs gap-1.5 rounded-lg">
+              <ArrowLeft className="w-4 h-4" />
               <span>Back</span>
             </Button>
           </Link>
-          <span className="font-bold text-xs text-foreground truncate max-w-[120px] sm:max-w-none">
+          <span className="font-bold text-sm text-foreground font-mono truncate max-w-[140px] sm:max-w-none">
             {invoice.invoice_number || "Invoice"}
           </span>
         </div>
 
-        <div className="flex flex-wrap items-center gap-1">
+        <div className="flex flex-wrap items-center gap-1.5">
           {/* Zoom Controller */}
-          <div className="flex items-center border border-border bg-card rounded px-1 py-0.5 h-7">
+          <div className="flex items-center border border-border bg-card rounded-lg px-1.5 py-0.5 h-8 shadow-xs">
             <Button
               variant="ghost"
               size="icon"
-              className="h-5 w-5"
+              className="h-6 w-6 rounded"
               onClick={() => changeZoom(-0.1)}
               title="Zoom out"
             >
-              <ZoomOut className="w-3 h-3" />
+              <ZoomOut className="w-3.5 h-3.5" />
             </Button>
-            <span className="text-[10px] font-mono font-medium w-8 text-center select-none">
+            <span className="text-xs font-mono font-medium w-10 text-center select-none text-foreground">
               {Math.round(zoom * 100)}%
             </span>
             <Button
               variant="ghost"
               size="icon"
-              className="h-5 w-5"
+              className="h-6 w-6 rounded"
               onClick={() => changeZoom(0.1)}
               title="Zoom in"
             >
-              <ZoomIn className="w-3 h-3" />
+              <ZoomIn className="w-3.5 h-3.5" />
             </Button>
             <Button
               variant="ghost"
               size="icon"
-              className="h-5 w-5 border-l border-border/40 ml-0.5"
+              className="h-6 w-6 rounded border-l border-border/60 ml-1 pl-1"
               title="Auto-fit screen"
               onClick={handleAutoFit}
             >
-              <Maximize2 className="w-3 h-3" />
+              <Maximize2 className="w-3.5 h-3.5" />
             </Button>
           </div>
 
           {/* Stamp Scale */}
-          <div className="flex items-center border border-border bg-card rounded px-1 py-0.5 h-7">
-            <Stamp className="w-3 h-3 text-muted-foreground mr-0.5" />
+          <div className="flex items-center border border-border bg-card rounded-lg px-1.5 py-0.5 h-8 shadow-xs">
+            <Stamp className="w-3.5 h-3.5 text-muted-foreground mr-1" />
             <Button
               variant="ghost"
               size="icon"
-              className="h-5 w-5"
+              className="h-6 w-6 rounded"
               onClick={() =>
                 setStampScale((s) => Math.max(0.3, parseFloat((s - 0.1).toFixed(1))))
               }
+              title="Shrink stamp"
             >
-              <ZoomOut className="w-3 h-3" />
+              <ZoomOut className="w-3.5 h-3.5" />
             </Button>
-            <span className="text-[10px] font-mono font-medium w-8 text-center select-none">
+            <span className="text-xs font-mono font-medium w-10 text-center select-none text-foreground">
               {Math.round(stampScale * 100)}%
             </span>
             <Button
               variant="ghost"
               size="icon"
-              className="h-5 w-5"
+              className="h-6 w-6 rounded"
               onClick={() =>
                 setStampScale((s) => Math.min(3, parseFloat((s + 0.1).toFixed(1))))
               }
+              title="Enlarge stamp"
             >
-              <ZoomIn className="w-3 h-3" />
+              <ZoomIn className="w-3.5 h-3.5" />
             </Button>
           </div>
 
@@ -317,9 +311,9 @@ export default function InvoiceView() {
             size="sm"
             onClick={handleDownloadPDF}
             disabled={isCapturing}
-            className="h-7 px-2 text-[11px] gap-1 font-medium rounded shadow-none"
+            className="h-8 px-2.5 text-xs gap-1.5 font-medium rounded-lg shadow-none"
           >
-            {isCapturing ? <Loader2 className="w-3 h-3 animate-spin" /> : <Download className="w-3 h-3" />}
+            {isCapturing ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Download className="w-3.5 h-3.5" />}
             <span>PDF</span>
           </Button>
 
@@ -328,18 +322,18 @@ export default function InvoiceView() {
             size="sm"
             onClick={handleDownloadJPG}
             disabled={isCapturing}
-            className="h-7 px-2 text-[11px] gap-1 font-medium rounded shadow-none"
+            className="h-8 px-2.5 text-xs gap-1.5 font-medium rounded-lg shadow-none"
           >
-            {isCapturing ? <Loader2 className="w-3 h-3 animate-spin" /> : <Download className="w-3 h-3" />}
+            {isCapturing ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Download className="w-3.5 h-3.5" />}
             <span>JPG</span>
           </Button>
 
           <Button
             size="sm"
             onClick={handlePrint}
-            className="h-7 px-2.5 text-[11px] gap-1 font-semibold rounded shadow-none"
+            className="h-8 px-3 text-xs gap-1.5 font-semibold rounded-lg shadow-none"
           >
-            <Printer className="w-3 h-3 stroke-[2.2]" />
+            <Printer className="w-3.5 h-3.5 stroke-[2.2]" />
             <span>Print</span>
           </Button>
 
@@ -349,9 +343,9 @@ export default function InvoiceView() {
               <Button
                 variant="destructive"
                 size="sm"
-                className="h-7 px-2 text-[11px] gap-1 font-medium rounded shadow-none"
+                className="h-8 px-2.5 text-xs gap-1 font-medium rounded-lg shadow-none"
               >
-                <Trash2 className="w-3 h-3" />
+                <Trash2 className="w-3.5 h-3.5" />
               </Button>
             </AlertDialogTrigger>
             <AlertDialogContent className="max-w-xs p-4 gap-3">
@@ -362,10 +356,10 @@ export default function InvoiceView() {
                 </AlertDialogDescription>
               </AlertDialogHeader>
               <AlertDialogFooter className="gap-1.5 pt-1">
-                <AlertDialogCancel className="h-7 text-xs px-2.5">Cancel</AlertDialogCancel>
+                <AlertDialogCancel className="h-8 text-xs px-3">Cancel</AlertDialogCancel>
                 <AlertDialogAction
                   onClick={() => deleteMutation.mutate()}
-                  className="h-7 text-xs px-3 bg-destructive hover:bg-destructive/90"
+                  className="h-8 text-xs px-3.5 bg-destructive hover:bg-destructive/90"
                 >
                   Delete
                 </AlertDialogAction>
@@ -378,8 +372,8 @@ export default function InvoiceView() {
       {/* Viewport Frame with Callback Ref */}
       <div
         ref={setContainerRef}
-        className="w-full flex justify-center overflow-x-hidden overflow-y-auto rounded-lg bg-muted/10 border border-border/50 py-2 px-1 print:p-0 print:m-0 print:border-none print:bg-transparent"
-        style={{ minHeight: "calc(100vh - 110px)" }}
+        className="w-full flex justify-center overflow-x-hidden overflow-y-auto rounded-xl bg-muted/20 border border-border/60 py-3 px-1 print:p-0 print:m-0 print:border-none print:bg-transparent"
+        style={{ minHeight: "calc(100vh - 115px)" }}
       >
         <div
           ref={invoiceRef}

@@ -4,77 +4,77 @@
 
 @layer base {
   :root {
-    /* ── Native Device Text Scaling ── */
-    font-size: 100%; /* Honors user OS accessibility / browser default font size */
+    /* ── Proportional Accessibility Base ── */
+    font-size: 112.5%;
 
-    /* ── LIGHT: Clean porcelain background with Royal Electric Indigo ── */
-    --background:           240 20% 98%;
-    --foreground:           240 25% 10%;
+    /* ── LIGHT MODE: Matte Warm Alabaster Canvas ── */
+    --background:           40 18% 97%;
+    --foreground:           215 20% 17%;
     --card:                 0 0% 100%;
-    --card-foreground:      240 25% 10%;
+    --card-foreground:      215 20% 17%;
     --popover:              0 0% 100%;
-    --popover-foreground:   240 25% 10%;
+    --popover-foreground:   215 20% 17%;
 
-    /* PhonePe / CRED Ultra-Indigo */
-    --primary:              246 84% 60%;
-    --primary-foreground:   0 0% 100%;
+    /* Relaxed Deep Pine / Nordic Teal */
+    --primary:              172 42% 31%;
+    --primary-foreground:   40 30% 98%;
 
-    --secondary:            245 40% 94%;
-    --secondary-foreground: 246 60% 30%;
-    --muted:                240 15% 93%;
-    --muted-foreground:     240 10% 48%;
-    --accent:               250 50% 92%;
-    --accent-foreground:    246 60% 25%;
+    --secondary:            40 14% 92%;
+    --secondary-foreground: 215 20% 20%;
+    --muted:                40 12% 91%;
+    --muted-foreground:     215 10% 46%;
+    --accent:               170 25% 91%;
+    --accent-foreground:    172 45% 20%;
 
-    --destructive:          0 74% 52%;
+    --destructive:          4 58% 48%;
     --destructive-foreground: 0 0% 100%;
-    --border:               240 15% 89%;
-    --input:                240 15% 91%;
-    --ring:                 246 84% 60%;
-    --radius:               0.75rem;
+    --border:               40 12% 87%;
+    --input:                40 12% 88%;
+    --ring:                 172 42% 31%;
+    --radius:               0.625rem;
 
-    /* Light 3D Elevation Tokens */
-    --elevation-1: 0 1px 2px rgba(45, 20, 110, 0.04), 0 1px 4px rgba(0, 0, 0, 0.04);
-    --elevation-2: 0 1px 0 hsl(240 15% 89%), 0 2px 8px rgba(45, 20, 110, 0.05), 0 8px 24px rgba(0, 0, 0, 0.06);
-    --elevation-3: 0 1px 0 hsl(240 15% 89%), 0 6px 16px rgba(45, 20, 110, 0.08), 0 16px 36px rgba(0, 0, 0, 0.08);
-    --elevation-hover: 0 1px 0 hsl(240 15% 89%), 0 10px 28px rgba(99, 102, 241, 0.16), 0 20px 48px rgba(0, 0, 0, 0.08);
-    --inset-shadow: inset 0 1px 2px rgba(0, 0, 0, 0.05), inset 0 0 0 1px rgba(99, 102, 241, 0.04);
-    --surface-highlight: inset 0 1px 0 rgba(255, 255, 255, 0.95);
+    /* Natural Elevation Tokens */
+    --elevation-1: 0 1px 2px rgba(25, 30, 35, 0.03), 0 1px 3px rgba(25, 30, 35, 0.02);
+    --elevation-2: 0 1px 0 hsl(40 12% 87%), 0 2px 6px rgba(25, 30, 35, 0.03), 0 6px 16px rgba(25, 30, 35, 0.03);
+    --elevation-3: 0 1px 0 hsl(40 12% 87%), 0 4px 12px rgba(25, 30, 35, 0.04), 0 12px 24px rgba(25, 30, 35, 0.04);
+    --elevation-hover: 0 1px 0 hsl(40 12% 87%), 0 6px 18px rgba(46, 112, 102, 0.12), 0 14px 28px rgba(25, 30, 35, 0.04);
+    --inset-shadow: inset 0 1px 2px rgba(25, 30, 35, 0.03), inset 0 0 0 1px rgba(25, 30, 35, 0.02);
+    --surface-highlight: inset 0 1px 0 rgba(255, 255, 255, 0.85);
   }
 
   .dark {
-    /* ── DARK: Deep Cyber Obsidian & Electric Violet ── */
-    --background:           240 22% 8%;
-    --foreground:           240 15% 94%;
-    --card:                 240 18% 12%;
-    --card-foreground:      240 15% 94%;
-    --popover:              240 18% 11%;
-    --popover-foreground:   240 15% 94%;
+    /* ── DARK MODE: Muted Timber Graphite ── */
+    --background:           220 12% 11%;
+    --foreground:           40 15% 90%;
+    --card:                 220 10% 14%;
+    --card-foreground:      40 15% 90%;
+    --popover:              220 10% 13%;
+    --popover-foreground:   40 15% 90%;
 
-    /* Electric Violet for Dark Mode */
-    --primary:              250 92% 70%;
-    --primary-foreground:   240 30% 10%;
+    /* Restful Sage Teal */
+    --primary:              168 36% 56%;
+    --primary-foreground:   220 15% 10%;
 
-    --secondary:            240 16% 18%;
-    --secondary-foreground: 240 15% 90%;
-    --muted:                240 14% 16%;
-    --muted-foreground:     240 10% 55%;
-    --accent:               245 20% 20%;
-    --accent-foreground:    240 15% 95%;
+    --secondary:            220 8% 18%;
+    --secondary-foreground: 40 12% 86%;
+    --muted:                220 8% 17%;
+    --muted-foreground:     215 10% 60%;
+    --accent:               170 15% 20%;
+    --accent-foreground:    168 30% 92%;
 
-    --destructive:          0 65% 55%;
+    --destructive:          4 50% 55%;
     --destructive-foreground: 0 0% 100%;
-    --border:               240 14% 19%;
-    --input:                240 14% 15%;
-    --ring:                 250 92% 70%;
+    --border:               220 8% 21%;
+    --input:                220 8% 19%;
+    --ring:                 168 36% 56%;
 
-    /* Dark 3D Elevation Tokens */
-    --elevation-1: 0 1px 2px rgba(0, 0, 0, 0.35), 0 1px 4px rgba(0, 0, 0, 0.25);
-    --elevation-2: 0 1px 0 hsl(240 14% 20%), 0 3px 10px rgba(0, 0, 0, 0.50), 0 10px 26px rgba(0, 0, 0, 0.45);
-    --elevation-3: 0 1px 0 hsl(240 14% 22%), 0 6px 20px rgba(0, 0, 0, 0.60), 0 18px 44px rgba(0, 0, 0, 0.50);
-    --elevation-hover: 0 1px 0 hsl(240 14% 25%), 0 10px 30px rgba(129, 140, 248, 0.20), 0 24px 56px rgba(0, 0, 0, 0.60);
-    --inset-shadow: inset 0 1px 3px rgba(0, 0, 0, 0.55), inset 0 0 0 1px rgba(255, 255, 255, 0.05);
-    --surface-highlight: inset 0 1px 0 rgba(255, 255, 255, 0.08);
+    /* Dark Mode Ambient Tokens */
+    --elevation-1: 0 1px 2px rgba(0, 0, 0, 0.25), 0 1px 4px rgba(0, 0, 0, 0.16);
+    --elevation-2: 0 1px 0 hsl(220 8% 21%), 0 2px 6px rgba(0, 0, 0, 0.30), 0 6px 16px rgba(0, 0, 0, 0.26);
+    --elevation-3: 0 1px 0 hsl(220 8% 23%), 0 5px 14px rgba(0, 0, 0, 0.35), 0 14px 28px rgba(0, 0, 0, 0.30);
+    --elevation-hover: 0 1px 0 hsl(220 8% 25%), 0 6px 18px rgba(100, 185, 170, 0.12), 0 16px 36px rgba(0, 0, 0, 0.38);
+    --inset-shadow: inset 0 1px 2px rgba(0, 0, 0, 0.35), inset 0 0 0 1px rgba(255, 255, 255, 0.03);
+    --surface-highlight: inset 0 1px 0 rgba(255, 255, 255, 0.05);
   }
 }
 
@@ -84,20 +84,19 @@
   }
 
   html {
-    /* Prevent mobile browsers from arbitrarily inflating unstyled text */
     -webkit-text-size-adjust: 100%;
     text-size-adjust: 100%;
   }
 
   body {
-    @apply bg-background text-foreground antialiased selection:bg-primary/20;
-    font-size: 1rem; /* Inherits 100% of user preference */
-    line-height: 1.5;
-    font-feature-settings: "rlig" 1, "calt" 1;
+    @apply bg-background text-foreground antialiased selection:bg-primary/20 font-sans;
+    font-size: 1.125rem;
+    line-height: 1.6;
+    letter-spacing: -0.011em;
+    font-feature-settings: "cv02", "cv03", "cv04", "cv11";
     transition: background-color 0.25s ease, color 0.25s ease;
   }
 
-  /* Force all form controls to inherit user-scaled typography */
   input,
   button,
   textarea,
@@ -109,14 +108,14 @@
 
   :root body {
     background-image:
-      radial-gradient(ellipse at 0% 0%, hsl(246 80% 95%) 0%, transparent 50%),
-      radial-gradient(ellipse at 100% 100%, hsl(240 30% 94%) 0%, transparent 60%);
+      radial-gradient(ellipse at 0% 0%, hsl(40 25% 94%) 0%, transparent 55%),
+      radial-gradient(ellipse at 100% 100%, hsl(40 15% 93%) 0%, transparent 60%);
   }
 
   .dark body {
     background-image:
-      radial-gradient(ellipse at 15% 0%, hsl(246 45% 15%) 0%, transparent 55%),
-      radial-gradient(ellipse at 85% 100%, hsl(240 25% 10%) 0%, transparent 60%);
+      radial-gradient(ellipse at 15% 0%, hsl(220 12% 14%) 0%, transparent 55%),
+      radial-gradient(ellipse at 85% 100%, hsl(220 10% 9%) 0%, transparent 60%);
   }
 }
 
@@ -146,15 +145,15 @@
     box-shadow: 1px 0 0 hsl(var(--border)), var(--elevation-1);
   }
   .dark aside {
-    background: hsl(240 18% 11%);
-    box-shadow: 1px 0 0 hsl(240 14% 18%), 2px 0 16px rgba(0, 0, 0, 0.45);
+    background: hsl(220 10% 13%);
+    box-shadow: 1px 0 0 hsl(220 8% 18%), 2px 0 14px rgba(0, 0, 0, 0.26);
   }
 
   nav a[class*="bg-primary"],
   nav [class*="bg-primary"] {
     box-shadow:
-      0 2px 6px hsl(var(--primary) / 0.35),
-      0 6px 18px hsl(var(--primary) / 0.20),
+      0 2px 5px hsl(var(--primary) / 0.22),
+      0 4px 12px hsl(var(--primary) / 0.12),
       var(--surface-highlight) !important;
   }
 
@@ -176,27 +175,27 @@
 
   button[class*="bg-primary"] {
     box-shadow:
-      0 1px 0 hsl(246 80% 45%),
-      0 4px 14px hsl(var(--primary) / 0.35),
+      0 1px 0 hsl(172 42% 24%),
+      0 3px 8px hsl(var(--primary) / 0.24),
       var(--surface-highlight);
   }
   button[class*="bg-primary"]:hover {
     box-shadow:
-      0 1px 0 hsl(246 80% 45%),
-      0 6px 20px hsl(var(--primary) / 0.45),
+      0 1px 0 hsl(172 42% 24%),
+      0 5px 14px hsl(var(--primary) / 0.32),
       var(--surface-highlight);
     transform: translateY(-1px);
   }
   button[class*="bg-primary"]:active {
-    box-shadow: 0 0 0 hsl(246 80% 45%), inset 0 1px 3px rgba(0, 0, 0, 0.25);
+    box-shadow: 0 0 0 hsl(172 42% 24%), inset 0 1px 2px rgba(0, 0, 0, 0.18);
     transform: translateY(1px);
   }
 
   button[class*="bg-destructive"] {
-    box-shadow: 0 1px 0 hsl(0 72% 38%), 0 2px 8px hsl(0 74% 52% / 0.25), var(--surface-highlight);
+    box-shadow: 0 1px 0 hsl(4 50% 36%), 0 2px 5px hsl(4 58% 48% / 0.20), var(--surface-highlight);
   }
   button[class*="bg-destructive"]:active {
-    box-shadow: 0 0 0 hsl(0 72% 38%);
+    box-shadow: 0 0 0 hsl(4 50% 36%);
     transform: translateY(1px);
   }
 
@@ -210,39 +209,66 @@
   textarea:focus {
     box-shadow:
       var(--inset-shadow),
-      0 0 0 3px hsl(var(--ring) / 0.22) !important;
+      0 0 0 3px hsl(var(--ring) / 0.16) !important;
   }
 
-  .badge-success { @apply bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20; }
-  .badge-danger  { @apply bg-rose-500/15 text-rose-600 dark:text-rose-400 border border-rose-500/20; }
-  .badge-info    { @apply bg-indigo-500/15 text-indigo-600 dark:text-indigo-300 border border-indigo-500/20; }
-  .badge-neutral { @apply bg-secondary text-secondary-foreground border border-border; }
+  .badge-success { @apply bg-emerald-600/12 text-emerald-800 dark:text-emerald-300 border border-emerald-600/20 font-medium; }
+  .badge-danger  { @apply bg-amber-700/12 text-amber-900 dark:text-amber-200 border border-amber-700/20 font-medium; }
+  .badge-info    { @apply bg-teal-600/12 text-teal-800 dark:text-teal-300 border border-teal-600/20 font-medium; }
+  .badge-neutral { @apply bg-secondary text-secondary-foreground border border-border font-medium; }
 
   .stat-value {
-    @apply text-3xl font-bold tracking-tight text-foreground;
-    text-shadow: 0 1px 2px rgba(0, 0, 0, 0.06);
-  }
-  .dark .stat-value {
-    text-shadow: 0 1px 3px rgba(0, 0, 0, 0.50);
+    @apply text-3xl font-bold tracking-tight text-foreground font-mono;
   }
 }
 
-::-webkit-scrollbar { width: 5px; height: 5px; }
+/* ── ISOLATED INVOICE PRINT CANVAS ──
+   Directly targets all elements inside the canvas to lock them to Inter and standard monospace */
+.invoice-print-canvas,
+.invoice-print-canvas *:not(.font-mono):not([data-mono="true"]) {
+  font-family: 'Inter', system-ui, -apple-system, BlinkMacSystemFont, sans-serif !important;
+  letter-spacing: normal !important;
+}
+
+.invoice-print-canvas .font-mono,
+.invoice-print-canvas [data-mono="true"] {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Courier New", Courier, monospace !important;
+}
+
+.invoice-print-canvas {
+  font-size: 12px !important;
+  line-height: 1.35 !important;
+  -webkit-text-size-adjust: 100% !important;
+  text-size-adjust: 100% !important;
+  background-color: #ffffff !important;
+  color: #000000 !important;
+}
+
+::-webkit-scrollbar { width: 6px; height: 6px; }
 ::-webkit-scrollbar-track { background: transparent; }
 ::-webkit-scrollbar-thumb {
-  background: hsl(var(--muted-foreground) / 0.20);
+  background: hsl(var(--muted-foreground) / 0.22);
   border-radius: 9999px;
 }
 ::-webkit-scrollbar-thumb:hover {
-  background: hsl(var(--primary) / 0.50);
+  background: hsl(var(--primary) / 0.45);
 }
 
 @media print {
   .no-print { display: none !important; }
   html, body {
-    font-size: 10pt !important; /* Preserves paper layout calibration during physical printing */
+    font-family: 'Inter', system-ui, sans-serif !important;
+    font-size: 10pt !important;
     background: white !important; 
     color: black !important; 
+  }
+  .invoice-print-canvas {
+    font-size: 9.5pt !important;
+    line-height: 1.25 !important;
+    background: white !important;
+    color: black !important;
+    box-shadow: none !important;
+    border: none !important;
   }
   * { box-shadow: none !important; }
 }

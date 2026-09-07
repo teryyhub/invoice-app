@@ -26,9 +26,9 @@ export default function InvoiceTemplate({ invoice, vendor, stampScale = 1 }) {
       style={{
         width: "794px",
         minWidth: "794px",
-        fontFamily: "'Inter', system-ui, sans-serif",
+        fontSize: "11px",
       }}
-      className="bg-white text-black p-8 box-border shadow-xs border border-neutral-200 print:border-none print:shadow-none print:p-0 print:m-0 print:!w-full"
+      className="invoice-print-canvas bg-white text-black p-8 box-border shadow-xs border border-neutral-200 print:border-none print:shadow-none print:p-0 print:m-0 print:!w-full"
     >
       <div className="border-2 border-black">
         {/* Header */}
@@ -37,19 +37,19 @@ export default function InvoiceTemplate({ invoice, vendor, stampScale = 1 }) {
             {vendor.vendor_name || "Vendor Name"}
           </h1>
           {vendor.address && (
-            <p className="text-xs mt-1 leading-relaxed whitespace-pre-line break-words">
+            <p className="text-[11px] mt-1 leading-relaxed whitespace-pre-line break-words">
               {vendor.address}
             </p>
           )}
           {vendor.gstin && (
-            <p className="text-xs font-semibold mt-0.5 break-all">
+            <p className="text-[11px] font-semibold mt-0.5 break-all">
               GSTIN: {vendor.gstin}
             </p>
           )}
         </div>
 
         {/* Customer & Invoice Meta Grid */}
-        <div className="divide-y-2 divide-black text-xs">
+        <div className="divide-y-2 divide-black text-[11px]">
           <div className="grid grid-cols-12 items-stretch">
             <div className="col-span-2 border-r border-black p-2 font-bold flex items-center">
               NAME
@@ -90,8 +90,8 @@ export default function InvoiceTemplate({ invoice, vendor, stampScale = 1 }) {
             <div className="col-span-2 border-r border-black p-2 font-bold flex items-center">
               INVOICE NO.:
             </div>
-            {/* Centered vertically and horizontally with large prominent bold text */}
-            <div className="col-span-4 p-2 flex items-center justify-center text-center font-black text-base break-all leading-none font-mono tracking-wider">
+            {/* Centered vertically and horizontally with prominent bold text */}
+            <div className="col-span-4 p-2 flex items-center justify-center text-center font-black text-[15px] break-all leading-none font-mono tracking-wider">
               {invoice.invoice_number || ""}
             </div>
           </div>
@@ -107,7 +107,7 @@ export default function InvoiceTemplate({ invoice, vendor, stampScale = 1 }) {
         </div>
 
         {/* Product Table Header */}
-        <div className="border-t-2 border-b-2 border-black bg-neutral-100 font-bold text-xs text-center">
+        <div className="border-t-2 border-b-2 border-black bg-neutral-100 font-bold text-[11px] text-center">
           <div className="grid grid-cols-12 items-stretch">
             <div className="col-span-3 border-r border-black p-2 text-left">
               DESCRIPTION
@@ -121,7 +121,7 @@ export default function InvoiceTemplate({ invoice, vendor, stampScale = 1 }) {
         </div>
 
         {/* Product Details Row */}
-        <div className="border-b border-black text-xs">
+        <div className="border-b border-black text-[11px]">
           <div className="grid grid-cols-12 items-stretch">
             <div className="col-span-3 border-r border-black p-2 text-left space-y-1">
               <p className="font-semibold break-words leading-snug">
@@ -134,8 +134,8 @@ export default function InvoiceTemplate({ invoice, vendor, stampScale = 1 }) {
               )}
               {invoice.imei_serial && (
                 <div className="mt-1 pt-1 border-t border-dotted border-gray-400">
-                  <p className="font-bold text-xs leading-none">IMEI / SERIAL:</p>
-                  <p className="break-all font-mono font-bold text-sm tracking-wide leading-tight mt-0.5">
+                  <p className="font-bold text-[10px] leading-none">IMEI / SERIAL:</p>
+                  <p className="break-all font-mono font-bold text-[13px] tracking-wide leading-tight mt-0.5">
                     {invoice.imei_serial}
                   </p>
                 </div>
@@ -173,7 +173,7 @@ export default function InvoiceTemplate({ invoice, vendor, stampScale = 1 }) {
 
         {/* Terms & Grand Total */}
         <div>
-          <div className="grid grid-cols-12 text-xs items-stretch">
+          <div className="grid grid-cols-12 text-[11px] items-stretch">
             <div className="col-span-6 border-r border-black p-3 space-y-1.5 leading-relaxed">
               <p className="font-bold underline">TERMS & CONDITIONS:</p>
               <p className="break-words">
@@ -189,8 +189,8 @@ export default function InvoiceTemplate({ invoice, vendor, stampScale = 1 }) {
 
             <div className="col-span-6 p-3 flex flex-col justify-between">
               <div className="flex justify-between items-start border-b border-black pb-2 gap-2">
-                <span className="font-bold text-sm shrink-0">GRAND TOTAL:</span>
-                <span className="text-lg font-black tracking-tight text-right break-words font-mono">
+                <span className="font-bold text-xs shrink-0">GRAND TOTAL:</span>
+                <span className="text-[17px] font-black tracking-tight text-right break-words font-mono">
                   Rs.
                   {grandTotal.toLocaleString("en-IN", {
                     minimumFractionDigits: 2,
@@ -200,7 +200,7 @@ export default function InvoiceTemplate({ invoice, vendor, stampScale = 1 }) {
               </div>
 
               <div className="text-center mt-4">
-                <p className="text-xs font-bold uppercase break-words">
+                <p className="text-[11px] font-bold uppercase break-words">
                   {vendor.vendor_name}
                 </p>
 
@@ -220,7 +220,7 @@ export default function InvoiceTemplate({ invoice, vendor, stampScale = 1 }) {
                   <div className="h-16" />
                 )}
 
-                <p className="text-xs+ font-bold tracking-wider border-t border-dashed border-black pt-1 max-w-[220px] mx-auto">
+                <p className="text-[11px] font-bold tracking-wider border-t border-dashed border-black pt-1 max-w-[220px] mx-auto">
                   AUTHORISED SIGNATORY
                 </p>
               </div>
