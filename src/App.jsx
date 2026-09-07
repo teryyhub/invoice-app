@@ -41,10 +41,10 @@ const AuthenticatedApp = () => {
   return (
     <Routes>
       <Route element={<AppLayout />}>
-        <Route path="/"           element={<Dashboard />} />
-        <Route path="/generate"   element={<GenerateInvoice />} />
-        <Route path="/invoices"   element={<InvoiceList />} />
-        <Route path="/settings"   element={<VendorSettings />} />
+        <Route path="/"          element={<Dashboard />} />
+        <Route path="/generate"  element={<GenerateInvoice />} />
+        <Route path="/invoices"  element={<InvoiceList />} />
+        <Route path="/settings"  element={<VendorSettings />} />
         <Route path="/reports"    element={<Reports />} />
         <Route path="/customers"  element={<Customers />} />
         <Route path="/profile"    element={<ProfileSettings />} />
@@ -78,7 +78,15 @@ function App() {
               <Route path="/*" element={<AuthenticatedApp />} />
             </Routes>
           </Router>
-          <Toaster richColors />
+          <Toaster
+            position="top-center"
+            closeButton
+            duration={1000}
+            richColors
+            toastOptions={{
+              className: "text-xs font-medium shadow-md border border-border",
+            }}
+          />
         </QueryClientProvider>
       </AuthProvider>
     </ThemeProvider>

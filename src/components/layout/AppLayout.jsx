@@ -104,7 +104,7 @@ export default function AppLayout() {
               <div className="min-w-0 leading-tight">
                 <div className="flex items-center gap-1">
                   <h1 className="text-xs font-bold tracking-tight text-foreground truncate">
-                    Siva's Chola
+                    Invoice Gen Chola
                   </h1>
                   <span className="text-[8px] font-bold uppercase px-1 py-0.2 rounded bg-primary/10 text-primary">
                     Pro
@@ -195,7 +195,7 @@ export default function AppLayout() {
             <div className="leading-none">
               <div className="flex items-center gap-0.5">
                 <span className="text-xs font-bold tracking-tight text-foreground">
-                  Siva's Chola
+                  Invoice Gen Chola
                 </span>
                 <ChevronRight className="w-3 h-3 text-muted-foreground" />
               </div>
