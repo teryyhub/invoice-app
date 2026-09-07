@@ -1,3 +1,4 @@
+// src/pages/GenerateInvoice.jsx
 import React, { useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Invoice } from "@/api/invoices";
@@ -5,11 +6,9 @@ import { VendorProfile } from "@/api/vendorProfiles";
 import { uploadFile } from "@/api/storage";
 import { extractDataFromFile } from "@/api/extractor";
 import { useAuth } from "@/lib/AuthContext";
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
+import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { Upload, FileText, Loader2, CheckCircle2, AlertCircle } from "lucide-react";
+import { Upload, FileText, Loader2, CheckCircle2, AlertCircle, ArrowRight } from "lucide-react";
 import { toast } from "sonner";
 import { useNavigate, Link } from "react-router-dom";
 import { format, parse } from "date-fns";
@@ -42,24 +41,25 @@ function parseDeliveryDate(rawDate) {
   return format(new Date(), "yyyy-MM-dd");
 }
 
-// Returns true when the stored vendor_name is a raw CDAP placeholder (not a real name)
 const isCdapCode = (val) => /^CDAP\d+$/i.test((val || "").trim());
 const needsNameFill = (vendor) =>
   !vendor?.vendor_name || isCdapCode(vendor.vendor_name) || vendor.vendor_name.trim() === "";
+
+// Normalizes codes by removing whitespace, hyphens, and underscores for reliable matching
+const cleanCode = (str) => (str || "").toString().trim().toUpperCase().replace(/[\s\-_]/g, "");
 
 export default function GenerateInvoice() {
   const { user } = useAuth();
   const navigate = useNavigate();
   const queryClient = useQueryClient();
-  const [uploading, setUploading]   = useState(false);
+  const [uploading, setUploading] = useState(false);
   const [extracting, setExtracting] = useState(false);
-  const [extracted, setExtracted]   = useState(false);
-  const [fileUrl, setFileUrl]       = useState("");
-  const [matchedVendor, setMatchedVendor]             = useState(null);
-  const [vendorError, setVendorError]                 = useState("");
+  const [extracted, setExtracted] = useState(false);
+  const [fileUrl, setFileUrl] = useState("");
+  const [matchedVendor, setMatchedVendor] = useState(null);
+  const [vendorError, setVendorError] = useState("");
   const [extractedVendorName, setExtractedVendorName] = useState("");
   const [extractedVendorAddress, setExtractedVendorAddress] = useState("");
-  // Tracks whether we auto-updated the vendor record in this session
   const [vendorAutoUpdated, setVendorAutoUpdated] = useState(false);
 
   const [form, setForm] = useState({
@@ -91,23 +91,19 @@ export default function GenerateInvoice() {
     },
   });
 
-  // Silently patches vendor_name (and optionally a real address) onto the vendor
-  // record when those fields are still blank / placeholder. This does NOT touch
-  // any previously generated invoice — invoices snapshot their own fields.
   const patchVendorNameIfNeeded = async (vendor, nameFromPdf, addressFromPdf) => {
     if (!vendor?.id) return;
 
-    const trimmedName    = (nameFromPdf    || "").trim();
+    const trimmedName = (nameFromPdf || "").trim();
     const trimmedAddress = (addressFromPdf || "").trim();
 
-    // Determine what needs updating
-    const shouldUpdateName    = needsNameFill(vendor) && trimmedName && !isCdapCode(trimmedName);
+    const shouldUpdateName = needsNameFill(vendor) && trimmedName && !isCdapCode(trimmedName);
     const shouldUpdateAddress = (!vendor.vendor_address || vendor.vendor_address.trim() === "") && trimmedAddress;
 
-    if (!shouldUpdateName && !shouldUpdateAddress) return; // nothing to patch
+    if (!shouldUpdateName && !shouldUpdateAddress) return;
 
     const patch = {};
-    if (shouldUpdateName)    patch.vendor_name    = trimmedName;
+    if (shouldUpdateName) patch.vendor_name = trimmedName;
     if (shouldUpdateAddress) patch.vendor_address = trimmedAddress;
 
     try {
@@ -117,12 +113,11 @@ export default function GenerateInvoice() {
       setVendorAutoUpdated(true);
 
       const what = [
-        shouldUpdateName    && "name",
+        shouldUpdateName && "name",
         shouldUpdateAddress && "address",
       ].filter(Boolean).join(" & ");
-      toast.success(`Vendor ${what} auto-saved to Settings`);
+      toast.success(`Vendor ${what} auto-saved`);
     } catch (err) {
-      // Non-fatal — the invoice can still be generated
       console.warn("Could not auto-update vendor record:", err);
     }
   };
@@ -151,18 +146,28 @@ export default function GenerateInvoice() {
       if (result.status === "success" && result.output) {
         const d = result.output;
 
-        // ── Vendor matching: compare by vendor code stored in `address` field ──
-        const extractedCode = (d.vendor_code || "").trim().toUpperCase();
-        let foundVendor = null;
-
-        if (extractedCode) {
-          foundVendor = vendors.find(v =>
-            (v.address || "").trim().toUpperCase() === extractedCode
-          );
+        // 1. Guaranteed Vendor Load: Ensures vendors are loaded even if the page just mounted
+        let vendorList = vendors;
+        if (!vendorList || vendorList.length === 0) {
+          vendorList = await queryClient.ensureQueryData({
+            queryKey: ["vendors", user?.id],
+            queryFn: () => VendorProfile.list(100),
+          });
         }
 
-        // Always store the name & address from the PDF regardless of match
-        const pdfVendorName    = d.vendor_name    || "";
+        // 2. Normalized vendor code matching (checks both v.address and v.vendor_name)
+        const targetCode = cleanCode(d.vendor_code);
+        let foundVendor = null;
+
+        if (targetCode && vendorList?.length > 0) {
+          foundVendor = vendorList.find(v => {
+            const addrCode = cleanCode(v.address);
+            const nameCode = cleanCode(v.vendor_name);
+            return addrCode === targetCode || nameCode === targetCode;
+          });
+        }
+
+        const pdfVendorName = d.vendor_name || "";
         const pdfVendorAddress = d.vendor_address || "";
         setExtractedVendorName(pdfVendorName);
         setExtractedVendorAddress(pdfVendorAddress);
@@ -170,48 +175,43 @@ export default function GenerateInvoice() {
         if (foundVendor) {
           setMatchedVendor(foundVendor);
           setVendorError("");
-
-          // ── Auto-fill vendor name/address in Settings if still a placeholder ──
           await patchVendorNameIfNeeded(foundVendor, pdfVendorName, pdfVendorAddress);
         } else {
           setMatchedVendor(null);
           setVendorError(
-            `Vendor code "${extractedCode || "not found"}" is not saved in Settings. ` +
-            `Please add this vendor with code "${extractedCode}" in Settings first.`
+            `Code "${d.vendor_code || "N/A"}" not found in Settings.`
           );
         }
 
-        // ── Duplicate IMEI check ──
         if (d.imei_serial) {
           const duplicate = invoices.find(inv =>
             inv.imei_serial?.trim() === d.imei_serial.trim()
           );
           if (duplicate) {
             toast.error(
-              `Duplicate: Invoice ${duplicate.invoice_number} already exists for IMEI ${d.imei_serial}`
+              `Duplicate: Invoice ${duplicate.invoice_number} exists for IMEI ${d.imei_serial}`
             );
             return;
           }
         }
 
-        // ── Fill form ──
         setForm(prev => ({
           ...prev,
-          customer_name:         d.customer_name        || prev.customer_name,
-          customer_mobile:       d.customer_mobile      || prev.customer_mobile,
-          customer_address:      d.customer_address     || prev.customer_address,
-          product_description:   d.manufacturer || d.category || prev.product_description,
-          product_model:         d.model                || prev.product_model,
-          imei_serial:           d.imei_serial          || prev.imei_serial,
-          product_price:         d.product_price ? String(d.product_price) : prev.product_price,
-          invoice_date:          parseDeliveryDate(d.delivery_date),
+          customer_name: d.customer_name || prev.customer_name,
+          customer_mobile: d.customer_mobile || prev.customer_mobile,
+          customer_address: d.customer_address || prev.customer_address,
+          product_description: d.manufacturer || d.category || prev.product_description,
+          product_model: d.model || prev.product_model,
+          imei_serial: d.imei_serial || prev.imei_serial,
+          product_price: d.product_price ? String(d.product_price) : prev.product_price,
+          invoice_date: parseDeliveryDate(d.delivery_date),
           delivery_order_number: d.delivery_order_number || prev.delivery_order_number,
         }));
 
         setExtracted(true);
-        toast.success("Data extracted successfully!");
+        toast.success("Details extracted");
       } else {
-        toast.error("Failed to extract data.");
+        toast.error("Extraction failed");
       }
     } catch (err) {
       toast.error("Upload failed: " + err.message);
@@ -221,96 +221,96 @@ export default function GenerateInvoice() {
   };
 
   const handleGenerate = () => {
-    if (!matchedVendor) { toast.error("Please match a vendor in Settings first."); return; }
+    if (!matchedVendor) { toast.error("Match vendor in Settings first"); return; }
     if (!form.customer_name || !form.product_price) {
-      toast.error("Customer name and product price are required");
+      toast.error("Customer name and price are required");
       return;
     }
 
     const price = parseFloat(form.product_price);
-    const rate  = Math.round(price * 0.8475 * 100) / 100;
-    const cgst  = Math.round(price * 0.0763 * 100) / 100;
-    const sgst  = Math.round(price * 0.0763 * 100) / 100;
+    const rate = Math.round(price * 0.8475 * 100) / 100;
+    const cgst = Math.round(price * 0.0763 * 100) / 100;
+    const sgst = Math.round(price * 0.0763 * 100) / 100;
     const invoiceNumber = getNextInvoiceNumber(invoices, form.invoice_date);
 
-    // Snapshot vendor name & address from PDF (not from the vendor record) so
-    // previously generated invoices remain unchanged if the record is later edited.
     createMutation.mutate({
-      invoice_number:        invoiceNumber,
-      invoice_date:          form.invoice_date,
-      vendor_id:             matchedVendor.id,
-      vendor_name:           extractedVendorName,   // PDF snapshot
-      vendor_address:        extractedVendorAddress, // PDF snapshot
-      vendor_gstin:          matchedVendor.gstin,
-      vendor_stamp_url:      matchedVendor.stamp_url || "",
-      customer_name:         form.customer_name,
-      customer_mobile:       form.customer_mobile,
-      customer_address:      form.customer_address,
-      mode:                  form.mode,
-      product_description:   form.product_description,
-      product_model:         form.product_model,
-      imei_serial:           form.imei_serial,
-      quantity:              1,
-      product_price:         price,
+      invoice_number: invoiceNumber,
+      invoice_date: form.invoice_date,
+      vendor_id: matchedVendor.id,
+      vendor_name: extractedVendorName,
+      vendor_address: extractedVendorAddress,
+      vendor_gstin: matchedVendor.gstin,
+      vendor_stamp_url: matchedVendor.stamp_url || "",
+      customer_name: form.customer_name,
+      customer_mobile: form.customer_mobile,
+      customer_address: form.customer_address,
+      mode: form.mode,
+      product_description: form.product_description,
+      product_model: form.product_model,
+      imei_serial: form.imei_serial,
+      quantity: 1,
+      product_price: price,
       rate, cgst, sgst,
-      grand_total:           price,
-      delivery_order_url:    fileUrl,
+      grand_total: price,
+      delivery_order_url: fileUrl,
       delivery_order_number: form.delivery_order_number,
     });
   };
 
   const price = parseFloat(form.product_price) || 0;
-  const rate  = Math.round(price * 0.8475 * 100) / 100;
-  const cgst  = Math.round(price * 0.0763 * 100) / 100;
-  const sgst  = Math.round(price * 0.0763 * 100) / 100;
+  const rate = Math.round(price * 0.8475 * 100) / 100;
+  const cgst = Math.round(price * 0.0763 * 100) / 100;
+  const sgst = Math.round(price * 0.0763 * 100) / 100;
   const noVendors = !loadingVendors && vendors.length === 0;
 
   return (
-    <div className="space-y-6">
-      <div className="flex flex-col gap-1">
-        <h1 className="text-2xl font-bold text-foreground">Generate Invoice</h1>
-        <p className="text-muted-foreground mt-1">Upload a delivery order to auto-fill invoice details</p>
+    <div className="space-y-2.5 max-w-4xl mx-auto">
+      {/* Header */}
+      <div className="flex items-center justify-between">
+        <div>
+          <h1 className="text-base font-bold text-foreground leading-tight">Create Invoice</h1>
+          <p className="text-[10px] text-muted-foreground leading-none">DO upload & automatic extraction</p>
+        </div>
+        <Link to="/invoices">
+          <Button variant="ghost" size="sm" className="h-6 px-2 text-[10px] text-primary gap-0.5">
+            Ledger <ArrowRight className="w-2.5 h-2.5" />
+          </Button>
+        </Link>
       </div>
 
+      {/* Missing Vendor Warning */}
       {noVendors && (
-        <Card className="border-destructive/30 bg-destructive/5">
-          <CardContent className="p-4 flex items-center justify-between">
-            <div className="flex items-center gap-2">
-              <AlertCircle className="w-4 h-4 text-destructive" />
-              <p className="text-sm text-destructive font-medium">
-                No vendors saved. Please add a vendor in Settings first.
-              </p>
-            </div>
-            <Link to="/settings"><Button size="sm" variant="destructive">Go to Settings</Button></Link>
-          </CardContent>
-        </Card>
+        <div className="p-2 rounded-lg bg-destructive/10 border border-destructive/20 flex items-center justify-between text-xs">
+          <div className="flex items-center gap-1.5 text-destructive">
+            <AlertCircle className="w-3.5 h-3.5 shrink-0" />
+            <span className="text-[11px] font-medium">No vendors found in profile settings.</span>
+          </div>
+          <Link to="/settings">
+            <Button size="sm" variant="destructive" className="h-5 px-1.5 text-[9px] font-semibold rounded">
+              Add Vendor
+            </Button>
+          </Link>
+        </div>
       )}
 
+      {/* Unmatched Vendor Alert */}
       {extracted && vendorError && (
-        <Card className="border-destructive bg-destructive/5">
-          <CardContent className="p-4 flex items-start gap-3">
-            <AlertCircle className="w-5 h-5 text-destructive shrink-0 mt-0.5" />
-            <div className="flex-1">
-              <p className="text-sm text-destructive font-semibold">Vendor Not Found</p>
-              <p className="text-sm text-destructive mt-0.5">{vendorError}</p>
-              <Link to="/settings">
-                <Button size="sm" variant="outline" className="mt-2 border-destructive text-destructive hover:bg-destructive hover:text-white">
-                  Add Vendor in Settings
-                </Button>
-              </Link>
-            </div>
-          </CardContent>
-        </Card>
+        <div className="p-2 rounded-lg bg-destructive/10 border border-destructive/20 flex items-center justify-between text-xs">
+          <div className="flex items-center gap-1.5 text-destructive min-w-0 pr-2">
+            <AlertCircle className="w-3.5 h-3.5 shrink-0" />
+            <span className="text-[10px] font-medium truncate">{vendorError}</span>
+          </div>
+          <Link to="/settings" className="shrink-0">
+            <Button size="sm" variant="outline" className="h-5 px-1.5 text-[9px] border-destructive text-destructive hover:bg-destructive hover:text-white rounded">
+              Settings
+            </Button>
+          </Link>
+        </div>
       )}
 
-      <Card>
-        <CardHeader>
-          <CardTitle className="text-lg flex items-center gap-2">
-            <Upload className="w-5 h-5" />Upload Delivery Order
-          </CardTitle>
-          <CardDescription>Upload a PDF or image of the delivery order to auto-extract all details</CardDescription>
-        </CardHeader>
-        <CardContent>
+      {/* Upload Box */}
+      <Card className="rounded-lg border-border/80 shadow-none bg-card">
+        <CardContent className="p-2.5">
           <label className="cursor-pointer block">
             <input
               type="file"
@@ -319,34 +319,36 @@ export default function GenerateInvoice() {
               onChange={handleFileUpload}
               disabled={uploading || extracting}
             />
-            <div className="border-2 border-dashed border-border rounded-xl p-8 text-center hover:border-primary/50 hover:bg-primary/5 transition-all">
+            <div className="border border-dashed border-border/80 rounded-md p-3.5 text-center hover:border-primary/50 hover:bg-primary/5 transition-all">
               {uploading || extracting ? (
-                <div className="flex flex-col items-center gap-2">
-                  <Loader2 className="w-8 h-8 text-primary animate-spin" />
-                  <p className="text-sm text-muted-foreground">
-                    {uploading ? "Uploading file..." : "Extracting data with AI..."}
+                <div className="flex items-center justify-center gap-1.5">
+                  <Loader2 className="w-3.5 h-3.5 text-primary animate-spin" />
+                  <p className="text-xs text-muted-foreground font-medium">
+                    {uploading ? "Uploading..." : "Reading Document..."}
                   </p>
                 </div>
               ) : extracted ? (
-                <div className="flex flex-col items-center gap-2">
-                  <CheckCircle2 className="w-8 h-8 text-green-600" />
-                  <p className="text-sm text-green-600 font-medium">
-                    {matchedVendor
-                      ? `Vendor matched: ${(matchedVendor.address || "").toUpperCase()}`
-                      : "Data extracted, but vendor not matched"}
-                  </p>
-                  {vendorAutoUpdated && (
-                    <p className="text-xs text-blue-600">
-                      ✦ Vendor name auto-saved to Settings
-                    </p>
-                  )}
-                  <p className="text-xs text-muted-foreground">Click to upload a different file</p>
+                <div className="flex items-center justify-between px-1">
+                  <div className="flex items-center gap-1.5 min-w-0 text-left">
+                    <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
+                    <div className="leading-tight truncate">
+                      <p className="text-xs text-emerald-600 font-bold truncate">
+                        {matchedVendor ? `Matched: ${(matchedVendor.address || "").toUpperCase()}` : "Vendor Unmatched"}
+                      </p>
+                      {vendorAutoUpdated && (
+                        <span className="text-[9px] text-primary block leading-none">Auto-updated in Settings</span>
+                      )}
+                    </div>
+                  </div>
+                  <span className="text-[10px] text-muted-foreground underline shrink-0 pl-2">Re-upload</span>
                 </div>
               ) : (
-                <div className="flex flex-col items-center gap-2">
-                  <FileText className="w-8 h-8 text-muted-foreground" />
-                  <p className="text-sm font-medium">Click to upload delivery order</p>
-                  <p className="text-xs text-muted-foreground">PDF, PNG, or JPG</p>
+                <div className="flex items-center justify-center gap-2">
+                  <Upload className="w-4 h-4 text-muted-foreground" />
+                  <div className="text-left leading-none">
+                    <p className="text-xs font-semibold text-foreground">Upload Delivery Order</p>
+                    <p className="text-[9px] text-muted-foreground mt-0.5">PDF or scanned picture</p>
+                  </div>
                 </div>
               )}
             </div>
@@ -354,120 +356,169 @@ export default function GenerateInvoice() {
         </CardContent>
       </Card>
 
+      {/* Extracted Form Editor */}
       {extracted && (
-        <Card>
-          <CardHeader>
-            <CardTitle className="text-lg">Invoice Details</CardTitle>
-            <CardDescription>Review and edit extracted information if needed</CardDescription>
-          </CardHeader>
-          <CardContent className="space-y-5">
-            {matchedVendor ? (
-              <div className="flex items-center gap-2 bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-800 rounded-lg p-3">
-                <CheckCircle2 className="w-4 h-4 text-green-600 shrink-0" />
-                <div className="text-sm">
-                  <span className="text-green-700 dark:text-green-400 font-medium">Vendor matched: </span>
-                  <span className="text-green-800 dark:text-green-300 font-bold font-mono">{(matchedVendor.address || "").toUpperCase()}</span>
+        <Card className="rounded-lg border-border/80 shadow-none bg-card">
+          <CardContent className="p-3 space-y-2.5">
+            {matchedVendor && (
+              <div className="flex items-center justify-between p-1.5 rounded bg-emerald-500/10 border border-emerald-500/20 text-emerald-700 dark:text-emerald-400 text-xs">
+                <div className="flex items-center gap-1 min-w-0 truncate">
+                  <CheckCircle2 className="w-3 h-3 text-emerald-600 shrink-0" />
+                  <span className="font-bold text-[11px] font-mono uppercase">{(matchedVendor.address || "").toUpperCase()}</span>
                   {extractedVendorName && !isCdapCode(extractedVendorName) && (
-                    <span className="text-green-700 dark:text-green-400 ml-2">— {extractedVendorName}</span>
+                    <span className="truncate text-[11px]">· {extractedVendorName}</span>
                   )}
-                  <span className="text-green-600 dark:text-green-500 ml-2 text-xs">
-                    GSTIN: {matchedVendor.gstin}
-                  </span>
                 </div>
-              </div>
-            ) : (
-              <div className="flex items-center gap-2 bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 rounded-lg p-3">
-                <AlertCircle className="w-4 h-4 text-amber-600 shrink-0" />
-                <div className="text-sm">
-                  <span className="text-amber-700 dark:text-amber-400 font-medium">Action Required: </span>
-                  <span className="text-amber-800 dark:text-amber-300">
-                    No vendor matched by code. Please add the vendor in Settings.
-                  </span>
-                </div>
+                <span className="text-[9px] font-mono text-muted-foreground shrink-0 pl-1">GSTIN: {matchedVendor.gstin}</span>
               </div>
             )}
 
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <div className="space-y-2">
-                <Label>Customer Name *</Label>
-                <Input value={form.customer_name} onChange={e => setForm(p => ({ ...p, customer_name: e.target.value }))} />
-              </div>
-              <div className="space-y-2">
-                <Label>Mobile No.</Label>
-                <Input value={form.customer_mobile} onChange={e => setForm(p => ({ ...p, customer_mobile: e.target.value }))} />
-              </div>
-            </div>
             <div className="space-y-2">
-              <Label>Customer Address</Label>
-              <Input value={form.customer_address} onChange={e => setForm(p => ({ ...p, customer_address: e.target.value }))} />
-            </div>
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-              <div className="space-y-2">
-                <Label>Mode</Label>
-                <Input value={form.mode} onChange={e => setForm(p => ({ ...p, mode: e.target.value }))} />
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                <div className="space-y-0.5">
+                  <label className="text-[9px] font-bold uppercase tracking-wider text-muted-foreground">Customer Name *</label>
+                  <input
+                    value={form.customer_name}
+                    onChange={e => setForm(p => ({ ...p, customer_name: e.target.value }))}
+                    className="w-full rounded border border-border bg-background px-2 py-1 text-xs outline-none focus:border-primary"
+                  />
+                </div>
+                <div className="space-y-0.5">
+                  <label className="text-[9px] font-bold uppercase tracking-wider text-muted-foreground">Mobile No.</label>
+                  <input
+                    value={form.customer_mobile}
+                    onChange={e => setForm(p => ({ ...p, customer_mobile: e.target.value }))}
+                    className="w-full rounded border border-border bg-background px-2 py-1 text-xs outline-none focus:border-primary font-mono text-[11px]"
+                  />
+                </div>
               </div>
-              <div className="space-y-2">
-                <Label>Invoice Date</Label>
-                <Input type="date" value={form.invoice_date} onChange={e => setForm(p => ({ ...p, invoice_date: e.target.value }))} />
+
+              <div className="space-y-0.5">
+                <label className="text-[9px] font-bold uppercase tracking-wider text-muted-foreground">Customer Address</label>
+                <input
+                  value={form.customer_address}
+                  onChange={e => setForm(p => ({ ...p, customer_address: e.target.value }))}
+                  className="w-full rounded border border-border bg-background px-2 py-1 text-xs outline-none focus:border-primary"
+                />
               </div>
-              <div className="space-y-2">
-                <Label>Product Price (₹) *</Label>
-                <Input type="number" value={form.product_price} onChange={e => setForm(p => ({ ...p, product_price: e.target.value }))} />
+
+              <div className="grid grid-cols-3 gap-2">
+                <div className="space-y-0.5">
+                  <label className="text-[9px] font-bold uppercase tracking-wider text-muted-foreground">Mode</label>
+                  <input
+                    value={form.mode}
+                    onChange={e => setForm(p => ({ ...p, mode: e.target.value }))}
+                    className="w-full rounded border border-border bg-background px-2 py-1 text-xs outline-none focus:border-primary uppercase font-medium"
+                  />
+                </div>
+                <div className="space-y-0.5">
+                  <label className="text-[9px] font-bold uppercase tracking-wider text-muted-foreground">Invoice Date</label>
+                  <input
+                    type="date"
+                    value={form.invoice_date}
+                    onChange={e => setForm(p => ({ ...p, invoice_date: e.target.value }))}
+                    className="w-full rounded border border-border bg-background px-2 py-1 text-xs outline-none focus:border-primary"
+                  />
+                </div>
+                <div className="space-y-0.5">
+                  <label className="text-[9px] font-bold uppercase tracking-wider text-muted-foreground">Price (₹) *</label>
+                  <input
+                    type="number"
+                    value={form.product_price}
+                    onChange={e => setForm(p => ({ ...p, product_price: e.target.value }))}
+                    className="w-full rounded border border-border bg-background px-2 py-1 text-xs font-bold outline-none focus:border-primary text-primary"
+                  />
+                </div>
               </div>
-            </div>
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <div className="space-y-2">
-                <Label>Product Description</Label>
-                <Input value={form.product_description} onChange={e => setForm(p => ({ ...p, product_description: e.target.value }))} />
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                <div className="space-y-0.5">
+                  <label className="text-[9px] font-bold uppercase tracking-wider text-muted-foreground">Product Category / Desc</label>
+                  <input
+                    value={form.product_description}
+                    onChange={e => setForm(p => ({ ...p, product_description: e.target.value }))}
+                    className="w-full rounded border border-border bg-background px-2 py-1 text-xs outline-none focus:border-primary"
+                  />
+                </div>
+                <div className="space-y-0.5">
+                  <label className="text-[9px] font-bold uppercase tracking-wider text-muted-foreground">Model</label>
+                  <input
+                    value={form.product_model}
+                    onChange={e => setForm(p => ({ ...p, product_model: e.target.value }))}
+                    className="w-full rounded border border-border bg-background px-2 py-1 text-xs outline-none focus:border-primary"
+                  />
+                </div>
               </div>
-              <div className="space-y-2">
-                <Label>Model</Label>
-                <Input value={form.product_model} onChange={e => setForm(p => ({ ...p, product_model: e.target.value }))} />
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                <div className="space-y-0.5">
+                  <label className="text-[9px] font-bold uppercase tracking-wider text-muted-foreground">IMEI / Serial</label>
+                  <input
+                    value={form.imei_serial}
+                    onChange={e => setForm(p => ({ ...p, imei_serial: e.target.value }))}
+                    className="w-full rounded border border-border bg-background px-2 py-1 text-xs font-mono outline-none focus:border-primary text-[11px]"
+                  />
+                </div>
+                <div className="space-y-0.5">
+                  <label className="text-[9px] font-bold uppercase tracking-wider text-muted-foreground">App ID / DO No.</label>
+                  <input
+                    value={form.delivery_order_number}
+                    onChange={e => setForm(p => ({ ...p, delivery_order_number: e.target.value }))}
+                    className="w-full rounded border border-border bg-background px-2 py-1 text-xs font-mono outline-none focus:border-primary text-[11px]"
+                  />
+                </div>
               </div>
-            </div>
-            <div className="space-y-2">
-              <Label>IMEI / Serial Number</Label>
-              <Input value={form.imei_serial} onChange={e => setForm(p => ({ ...p, imei_serial: e.target.value }))} />
-            </div>
-            <div className="space-y-2">
-              <Label>Application ID</Label>
-              <Input
-                value={form.delivery_order_number}
-                onChange={e => setForm(p => ({ ...p, delivery_order_number: e.target.value }))}
-                placeholder="e.g. CDAP000127B01217641"
-              />
             </div>
 
+            {/* Calculations Preview */}
             {price > 0 && (
-              <div className="bg-accent/50 rounded-xl p-4 space-y-2">
-                <p className="text-sm font-semibold text-foreground">Calculation Preview</p>
-                <div className="grid grid-cols-2 md:grid-cols-4 gap-3 text-sm">
+              <div className="p-2 rounded bg-muted/30 border border-border/50 text-[11px] leading-tight">
+                <div className="grid grid-cols-4 gap-1 text-center">
                   <div>
-                    <p className="text-muted-foreground text-xs">Rate (84.75%)</p>
-                    <p className="font-semibold">₹{rate.toLocaleString("en-IN", { minimumFractionDigits: 2 })}</p>
+                    <span className="text-[9px] text-muted-foreground block">Rate</span>
+                    <span className="font-semibold text-foreground">₹{rate.toLocaleString("en-IN")}</span>
                   </div>
                   <div>
-                    <p className="text-muted-foreground text-xs">CGST (7.63%)</p>
-                    <p className="font-semibold">₹{cgst.toLocaleString("en-IN", { minimumFractionDigits: 2 })}</p>
+                    <span className="text-[9px] text-muted-foreground block">CGST</span>
+                    <span className="font-semibold text-foreground">₹{cgst.toLocaleString("en-IN")}</span>
                   </div>
                   <div>
-                    <p className="text-muted-foreground text-xs">SGST (7.63%)</p>
-                    <p className="font-semibold">₹{sgst.toLocaleString("en-IN", { minimumFractionDigits: 2 })}</p>
+                    <span className="text-[9px] text-muted-foreground block">SGST</span>
+                    <span className="font-semibold text-foreground">₹{sgst.toLocaleString("en-IN")}</span>
                   </div>
                   <div>
-                    <p className="text-muted-foreground text-xs">Grand Total</p>
-                    <p className="font-bold text-primary">₹{price.toLocaleString("en-IN", { minimumFractionDigits: 2 })}</p>
+                    <span className="text-[9px] text-muted-foreground block">Total</span>
+                    <span className="font-black text-primary">₹{price.toLocaleString("en-IN")}</span>
                   </div>
                 </div>
               </div>
             )}
 
-            <Button onClick={handleGenerate} disabled={createMutation.isPending} className="gap-2 w-full md:w-auto">
-              {createMutation.isPending
-                ? <Loader2 className="w-4 h-4 animate-spin" />
-                : <FileText className="w-4 h-4" />}
-              Generate Invoice
-            </Button>
+            {/* Actions */}
+            <div className="pt-1 flex items-center justify-end gap-2">
+              <Button
+                type="button"
+                variant="ghost"
+                size="sm"
+                onClick={() => setExtracted(false)}
+                className="h-7 px-2 text-[11px]"
+              >
+                Reset
+              </Button>
+              <Button
+                onClick={handleGenerate}
+                disabled={createMutation.isPending}
+                size="sm"
+                className="h-7 px-3 text-[11px] font-semibold gap-1 rounded-md shadow-none"
+              >
+                {createMutation.isPending ? (
+                  <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                ) : (
+                  <FileText className="w-3.5 h-3.5" />
+                )}
+                <span>Generate Invoice</span>
+              </Button>
+            </div>
           </CardContent>
         </Card>
       )}

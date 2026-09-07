@@ -4,6 +4,12 @@ export default {
   content: ["./index.html", "./src/**/*.{js,ts,jsx,tsx}"],
   theme: {
     extend: {
+      fontSize: {
+        // Relative micro-typography tokens scaling directly with the user's OS/browser font setting
+        "3xs": ["0.5625rem", { lineHeight: "0.75rem" }],  // ~9px equivalent at standard 16px base
+        "2xs": ["0.625rem", { lineHeight: "0.875rem" }],  // ~10px equivalent at standard 16px base
+        "xs+": ["0.6875rem", { lineHeight: "1rem" }],     // ~11px equivalent at standard 16px base
+      },
       borderRadius: {
         lg: "var(--radius)",
         md: "calc(var(--radius) - 2px)",

@@ -4,116 +4,135 @@
 
 @layer base {
   :root {
-    /* ── LIGHT: Warm white zinc ── */
-    --background:           0 0% 97%;
-    --foreground:           240 10% 10%;
-    --card:                 0 0% 100%;
-    --card-foreground:      240 10% 10%;
-    --popover:              0 0% 100%;
-    --popover-foreground:   240 10% 10%;
-    --primary:              243 75% 59%;
-    --primary-foreground:   0 0% 100%;
-    --secondary:            240 5% 93%;
-    --secondary-foreground: 240 10% 18%;
-    --muted:                240 5% 93%;
-    --muted-foreground:     240 5% 46%;
-    --accent:               240 5% 90%;
-    --accent-foreground:    240 10% 14%;
-    --destructive:          0 72% 51%;
-    --destructive-foreground: 0 0% 100%;
-    --border:               240 6% 88%;
-    --input:                240 6% 90%;
-    --ring:                 243 75% 59%;
-    --radius:               0.5rem;
+    /* ── Native Device Text Scaling ── */
+    font-size: 100%; /* Honors user OS accessibility / browser default font size */
 
-    /* Light 3D tokens */
-    --elevation-1: 0 1px 2px rgba(0,0,0,.04), 0 1px 4px rgba(0,0,0,.04);
-    --elevation-2: 0 1px 0 hsl(240 6% 88%), 0 2px 6px rgba(0,0,0,.06), 0 6px 18px rgba(0,0,0,.06);
-    --elevation-3: 0 1px 0 hsl(240 6% 88%), 0 4px 12px rgba(0,0,0,.08), 0 12px 32px rgba(0,0,0,.08);
-    --elevation-hover: 0 1px 0 hsl(240 6% 88%), 0 6px 20px rgba(0,0,0,.10), 0 16px 40px rgba(0,0,0,.08);
-    --inset-shadow: inset 0 1px 2px rgba(0,0,0,.06), inset 0 0 0 1px rgba(0,0,0,.04);
-    --surface-highlight: inset 0 1px 0 rgba(255,255,255,.9);
+    /* ── LIGHT: Clean porcelain background with Royal Electric Indigo ── */
+    --background:           240 20% 98%;
+    --foreground:           240 25% 10%;
+    --card:                 0 0% 100%;
+    --card-foreground:      240 25% 10%;
+    --popover:              0 0% 100%;
+    --popover-foreground:   240 25% 10%;
+
+    /* PhonePe / CRED Ultra-Indigo */
+    --primary:              246 84% 60%;
+    --primary-foreground:   0 0% 100%;
+
+    --secondary:            245 40% 94%;
+    --secondary-foreground: 246 60% 30%;
+    --muted:                240 15% 93%;
+    --muted-foreground:     240 10% 48%;
+    --accent:               250 50% 92%;
+    --accent-foreground:    246 60% 25%;
+
+    --destructive:          0 74% 52%;
+    --destructive-foreground: 0 0% 100%;
+    --border:               240 15% 89%;
+    --input:                240 15% 91%;
+    --ring:                 246 84% 60%;
+    --radius:               0.75rem;
+
+    /* Light 3D Elevation Tokens */
+    --elevation-1: 0 1px 2px rgba(45, 20, 110, 0.04), 0 1px 4px rgba(0, 0, 0, 0.04);
+    --elevation-2: 0 1px 0 hsl(240 15% 89%), 0 2px 8px rgba(45, 20, 110, 0.05), 0 8px 24px rgba(0, 0, 0, 0.06);
+    --elevation-3: 0 1px 0 hsl(240 15% 89%), 0 6px 16px rgba(45, 20, 110, 0.08), 0 16px 36px rgba(0, 0, 0, 0.08);
+    --elevation-hover: 0 1px 0 hsl(240 15% 89%), 0 10px 28px rgba(99, 102, 241, 0.16), 0 20px 48px rgba(0, 0, 0, 0.08);
+    --inset-shadow: inset 0 1px 2px rgba(0, 0, 0, 0.05), inset 0 0 0 1px rgba(99, 102, 241, 0.04);
+    --surface-highlight: inset 0 1px 0 rgba(255, 255, 255, 0.95);
   }
 
   .dark {
-    /* ── DARK: Deep zinc + slate ── */
-    --background:           240 6% 7%;
-    --foreground:           240 5% 90%;
-    --card:                 240 5% 10%;
-    --card-foreground:      240 5% 90%;
-    --popover:              240 5% 9%;
-    --popover-foreground:   240 5% 90%;
-    --primary:              243 75% 62%;
-    --primary-foreground:   0 0% 100%;
-    --secondary:            240 4% 15%;
-    --secondary-foreground: 240 5% 80%;
-    --muted:                240 4% 14%;
-    --muted-foreground:     240 5% 48%;
-    --accent:               240 4% 17%;
-    --accent-foreground:    240 5% 90%;
-    --destructive:          0 60% 50%;
-    --destructive-foreground: 0 0% 100%;
-    --border:               240 4% 17%;
-    --input:                240 4% 12%;
-    --ring:                 243 75% 62%;
+    /* ── DARK: Deep Cyber Obsidian & Electric Violet ── */
+    --background:           240 22% 8%;
+    --foreground:           240 15% 94%;
+    --card:                 240 18% 12%;
+    --card-foreground:      240 15% 94%;
+    --popover:              240 18% 11%;
+    --popover-foreground:   240 15% 94%;
 
-    /* Dark 3D tokens */
-    --elevation-1: 0 1px 2px rgba(0,0,0,.25), 0 1px 4px rgba(0,0,0,.20);
-    --elevation-2: 0 1px 0 hsl(240 5% 16%), 0 2px 8px rgba(0,0,0,.40), 0 6px 20px rgba(0,0,0,.35);
-    --elevation-3: 0 1px 0 hsl(240 5% 18%), 0 4px 16px rgba(0,0,0,.50), 0 14px 36px rgba(0,0,0,.45);
-    --elevation-hover: 0 1px 0 hsl(240 5% 20%), 0 8px 24px rgba(0,0,0,.55), 0 20px 48px rgba(0,0,0,.45);
-    --inset-shadow: inset 0 1px 3px rgba(0,0,0,.45), inset 0 0 0 1px rgba(0,0,0,.25);
-    --surface-highlight: inset 0 1px 0 rgba(255,255,255,.06);
+    /* Electric Violet for Dark Mode */
+    --primary:              250 92% 70%;
+    --primary-foreground:   240 30% 10%;
+
+    --secondary:            240 16% 18%;
+    --secondary-foreground: 240 15% 90%;
+    --muted:                240 14% 16%;
+    --muted-foreground:     240 10% 55%;
+    --accent:               245 20% 20%;
+    --accent-foreground:    240 15% 95%;
+
+    --destructive:          0 65% 55%;
+    --destructive-foreground: 0 0% 100%;
+    --border:               240 14% 19%;
+    --input:                240 14% 15%;
+    --ring:                 250 92% 70%;
+
+    /* Dark 3D Elevation Tokens */
+    --elevation-1: 0 1px 2px rgba(0, 0, 0, 0.35), 0 1px 4px rgba(0, 0, 0, 0.25);
+    --elevation-2: 0 1px 0 hsl(240 14% 20%), 0 3px 10px rgba(0, 0, 0, 0.50), 0 10px 26px rgba(0, 0, 0, 0.45);
+    --elevation-3: 0 1px 0 hsl(240 14% 22%), 0 6px 20px rgba(0, 0, 0, 0.60), 0 18px 44px rgba(0, 0, 0, 0.50);
+    --elevation-hover: 0 1px 0 hsl(240 14% 25%), 0 10px 30px rgba(129, 140, 248, 0.20), 0 24px 56px rgba(0, 0, 0, 0.60);
+    --inset-shadow: inset 0 1px 3px rgba(0, 0, 0, 0.55), inset 0 0 0 1px rgba(255, 255, 255, 0.05);
+    --surface-highlight: inset 0 1px 0 rgba(255, 255, 255, 0.08);
   }
 }
 
-/* ─────────────────────────────────────────────
-   BASE
-───────────────────────────────────────────── */
 @layer base {
-  * { @apply border-border; }
+  * { 
+    @apply border-border; 
+  }
+
+  html {
+    /* Prevent mobile browsers from arbitrarily inflating unstyled text */
+    -webkit-text-size-adjust: 100%;
+    text-size-adjust: 100%;
+  }
 
   body {
-    @apply bg-background text-foreground antialiased;
+    @apply bg-background text-foreground antialiased selection:bg-primary/20;
+    font-size: 1rem; /* Inherits 100% of user preference */
+    line-height: 1.5;
     font-feature-settings: "rlig" 1, "calt" 1;
     transition: background-color 0.25s ease, color 0.25s ease;
   }
 
-  /* Subtle page background texture */
+  /* Force all form controls to inherit user-scaled typography */
+  input,
+  button,
+  textarea,
+  select {
+    font-family: inherit;
+    font-size: inherit;
+    line-height: inherit;
+  }
+
   :root body {
     background-image:
-      radial-gradient(ellipse at 0% 0%, hsl(243 40% 96%) 0%, transparent 60%),
-      radial-gradient(ellipse at 100% 100%, hsl(240 20% 95%) 0%, transparent 60%);
+      radial-gradient(ellipse at 0% 0%, hsl(246 80% 95%) 0%, transparent 50%),
+      radial-gradient(ellipse at 100% 100%, hsl(240 30% 94%) 0%, transparent 60%);
   }
+
   .dark body {
     background-image:
-      radial-gradient(ellipse at 15% 0%, hsl(243 20% 10%) 0%, transparent 55%),
-      radial-gradient(ellipse at 85% 100%, hsl(240 15% 9%) 0%, transparent 55%);
+      radial-gradient(ellipse at 15% 0%, hsl(246 45% 15%) 0%, transparent 55%),
+      radial-gradient(ellipse at 85% 100%, hsl(240 25% 10%) 0%, transparent 60%);
   }
 }
 
-/* ─────────────────────────────────────────────
-   GLOBAL 3D SURFACE SYSTEM
-   Applied to shadcn Card automatically
-───────────────────────────────────────────── */
 @layer components {
-
-  /* Every Card gets elevation-2 by default */
   .rounded-xl.border,
   .rounded-lg.border {
     box-shadow: var(--elevation-2), var(--surface-highlight);
     transition: box-shadow 0.18s ease, transform 0.18s ease;
-    will-change: transform;
   }
 
-  /* Hover: lift */
   .rounded-xl.border:hover,
   .rounded-lg.border:hover {
     box-shadow: var(--elevation-hover), var(--surface-highlight);
     transform: translateY(-1px);
   }
 
-  /* Don't lift nav links or dropdowns */
   nav .rounded-xl.border:hover,
   nav .rounded-lg.border:hover,
   [role="menu"] .rounded-xl.border,
@@ -122,32 +141,27 @@
     box-shadow: var(--elevation-2), var(--surface-highlight);
   }
 
-  /* ── Sidebar ── */
   aside {
     background: hsl(var(--card));
     box-shadow: 1px 0 0 hsl(var(--border)), var(--elevation-1);
-    transition: box-shadow 0.2s;
   }
   .dark aside {
-    background: hsl(240 5% 9%);
-    box-shadow: 1px 0 0 hsl(240 4% 15%), 2px 0 16px rgba(0,0,0,.40);
+    background: hsl(240 18% 11%);
+    box-shadow: 1px 0 0 hsl(240 14% 18%), 2px 0 16px rgba(0, 0, 0, 0.45);
   }
 
-  /* ── Active nav pill ── */
   nav a[class*="bg-primary"],
   nav [class*="bg-primary"] {
     box-shadow:
-      0 1px 4px hsl(var(--primary) / 0.30),
-      0 2px 10px hsl(var(--primary) / 0.18),
+      0 2px 6px hsl(var(--primary) / 0.35),
+      0 6px 18px hsl(var(--primary) / 0.20),
       var(--surface-highlight) !important;
   }
 
-  /* ── Buttons: raised feel ── */
   button:not([disabled]) {
     transition: box-shadow 0.12s ease, transform 0.12s ease, background-color 0.15s;
   }
 
-  /* Default / outline button */
   button[class*="border"]:not([class*="bg-primary"]):not([class*="bg-destructive"]) {
     box-shadow: var(--elevation-1), var(--surface-highlight);
   }
@@ -160,35 +174,32 @@
     transform: translateY(0);
   }
 
-  /* Primary button */
   button[class*="bg-primary"] {
     box-shadow:
-      0 1px 0 hsl(243 75% 44%),
-      0 2px 8px hsl(var(--primary) / 0.28),
+      0 1px 0 hsl(246 80% 45%),
+      0 4px 14px hsl(var(--primary) / 0.35),
       var(--surface-highlight);
   }
   button[class*="bg-primary"]:hover {
     box-shadow:
-      0 1px 0 hsl(243 75% 44%),
-      0 4px 16px hsl(var(--primary) / 0.38),
+      0 1px 0 hsl(246 80% 45%),
+      0 6px 20px hsl(var(--primary) / 0.45),
       var(--surface-highlight);
     transform: translateY(-1px);
   }
   button[class*="bg-primary"]:active {
-    box-shadow: 0 0 0 hsl(243 75% 44%), inset 0 1px 3px rgba(0,0,0,.20);
+    box-shadow: 0 0 0 hsl(246 80% 45%), inset 0 1px 3px rgba(0, 0, 0, 0.25);
     transform: translateY(1px);
   }
 
-  /* Destructive button */
   button[class*="bg-destructive"] {
-    box-shadow: 0 1px 0 hsl(0 72% 36%), 0 2px 8px hsl(0 72% 51% / 0.25), var(--surface-highlight);
+    box-shadow: 0 1px 0 hsl(0 72% 38%), 0 2px 8px hsl(0 74% 52% / 0.25), var(--surface-highlight);
   }
   button[class*="bg-destructive"]:active {
-    box-shadow: 0 0 0 hsl(0 72% 36%);
+    box-shadow: 0 0 0 hsl(0 72% 38%);
     transform: translateY(1px);
   }
 
-  /* ── Inputs ── */
   input:not([type="checkbox"]):not([type="radio"]):not([type="range"]),
   textarea,
   select {
@@ -199,77 +210,39 @@
   textarea:focus {
     box-shadow:
       var(--inset-shadow),
-      0 0 0 3px hsl(var(--ring) / 0.18) !important;
+      0 0 0 3px hsl(var(--ring) / 0.22) !important;
   }
 
-  /* ── Table rows ── */
-  tbody tr {
-    transition: background-color 0.12s;
-  }
+  .badge-success { @apply bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20; }
+  .badge-danger  { @apply bg-rose-500/15 text-rose-600 dark:text-rose-400 border border-rose-500/20; }
+  .badge-info    { @apply bg-indigo-500/15 text-indigo-600 dark:text-indigo-300 border border-indigo-500/20; }
+  .badge-neutral { @apply bg-secondary text-secondary-foreground border border-border; }
 
-  /* ── Mobile top bar ── */
-  header,
-  .mobile-header {
-    box-shadow: 0 1px 0 hsl(var(--border)), var(--elevation-1);
-  }
-
-  /* ── Popover / Dropdown ── */
-  [data-radix-popper-content-wrapper] > * {
-    box-shadow: var(--elevation-3) !important;
-  }
-
-  /* ── Select trigger ── */
-  [role="combobox"] {
-    box-shadow: var(--elevation-1), var(--surface-highlight);
-  }
-
-  /* ── Switch track ── */
-  [role="switch"] {
-    box-shadow: var(--inset-shadow);
-  }
-
-  /* ── Toast ── */
-  [data-sonner-toast] {
-    box-shadow: var(--elevation-3) !important;
-  }
-
-  /* ── Badge ── */
-  .badge-success { @apply bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-400; }
-  .badge-danger  { @apply bg-red-100 text-red-800 dark:bg-red-950 dark:text-red-400; }
-  .badge-info    { @apply bg-blue-100 text-blue-800 dark:bg-blue-950 dark:text-blue-400; }
-  .badge-neutral { @apply bg-zinc-100 text-zinc-700 dark:bg-zinc-800/60 dark:text-zinc-300; }
-
-  /* ── Skeleton ── */
-  .skeleton { @apply animate-pulse rounded-md bg-muted; }
-
-  /* ── Stat highlight number ── */
   .stat-value {
     @apply text-3xl font-bold tracking-tight text-foreground;
-    text-shadow: 0 1px 2px rgba(0,0,0,.08);
+    text-shadow: 0 1px 2px rgba(0, 0, 0, 0.06);
   }
   .dark .stat-value {
-    text-shadow: 0 1px 3px rgba(0,0,0,.40);
+    text-shadow: 0 1px 3px rgba(0, 0, 0, 0.50);
   }
 }
 
-/* ─────────────────────────────────────────────
-   SCROLLBAR
-───────────────────────────────────────────── */
-::-webkit-scrollbar         { width: 5px; height: 5px; }
-::-webkit-scrollbar-track   { background: transparent; }
-::-webkit-scrollbar-thumb   {
-  background: hsl(var(--muted-foreground) / 0.18);
+::-webkit-scrollbar { width: 5px; height: 5px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb {
+  background: hsl(var(--muted-foreground) / 0.20);
   border-radius: 9999px;
 }
 ::-webkit-scrollbar-thumb:hover {
-  background: hsl(var(--primary) / 0.40);
+  background: hsl(var(--primary) / 0.50);
 }
 
-/* ─────────────────────────────────────────────
-   PRINT
-───────────────────────────────────────────── */
 @media print {
   .no-print { display: none !important; }
-  body      { background: white !important; color: black !important; }
+  html, body {
+    font-size: 10pt !important; /* Preserves paper layout calibration during physical printing */
+    background: white !important; 
+    color: black !important; 
+  }
   * { box-shadow: none !important; }
 }

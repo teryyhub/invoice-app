@@ -1,6 +1,8 @@
 import { createContext, useContext, useEffect, useState, useRef } from "react";
 import { supabase } from "@/api/supabaseClient";
 import { queryClientInstance } from "@/lib/query-client";
+import { Capacitor } from "@capacitor/core";
+import { App } from "@capacitor/app";
 
 const AuthContext = createContext(null);
 
@@ -75,6 +77,29 @@ export function AuthProvider({ children }) {
   };
 
   useEffect(() => {
+    const handleDeepLink = (urlStr) => {
+      try {
+        const url = new URL(urlStr);
+        // We only care about the path, query, and hash
+        const path = url.pathname + url.search + url.hash;
+        if (path && path !== "/") {
+          window.location.href = path;
+        }
+      } catch (e) {
+        console.error("Deep link error:", e);
+      }
+    };
+
+    if (Capacitor.isNativePlatform()) {
+      App.addListener("appUrlOpen", (event) => {
+        handleDeepLink(event.url);
+      });
+
+      App.getLaunchUrl().then((launchUrl) => {
+        if (launchUrl?.url) handleDeepLink(launchUrl.url);
+      });
+    }
+
     supabase.auth.getSession().then(async ({ data: { session } }) => {
       const currentUser = session?.user ?? null;
       setUser(currentUser);
@@ -109,8 +134,16 @@ export function AuthProvider({ children }) {
   const signIn = (email, password) =>
     supabase.auth.signInWithPassword({ email, password });
 
-  const signUp = (email, password) =>
-    supabase.auth.signUp({ email, password });
+  const signUp = (email, password) => {
+    const origin = Capacitor.isNativePlatform()
+      ? "com.sivcholainv.app://localhost"
+      : window.location.origin;
+    return supabase.auth.signUp({
+      email,
+      password,
+      options: { redirectTo: `${origin}/` }
+    });
+  };
 
   const signOut = async () => {
     try { await supabase.auth.signOut(); queryClientInstance.clear(); }
@@ -118,9 +151,13 @@ export function AuthProvider({ children }) {
   };
 
   const signInWithGoogle = async () => {
+    const redirectTo = Capacitor.isNativePlatform()
+      ? "com.sivcholainv.app://localhost"
+      : window.location.origin;
+
     const { data, error } = await supabase.auth.signInWithOAuth({
       provider: "google",
-      options: { redirectTo: window.location.origin },
+      options: { redirectTo },
     });
     if (error) throw error;
     return data;
@@ -133,8 +170,11 @@ export function AuthProvider({ children }) {
   };
 
   const requestPasswordReset = async (email) => {
+    const origin = Capacitor.isNativePlatform()
+      ? "com.sivcholainv.app://localhost"
+      : window.location.origin;
     const { error } = await supabase.auth.resetPasswordForEmail(email, {
-      redirectTo: `${window.location.origin}/reset-password`,
+      redirectTo: `${origin}/reset-password`,
     });
     if (error) throw error;
     return true;

@@ -2,20 +2,22 @@
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { useAuth } from "@/lib/AuthContext";
-import { FileText, Chrome, ShieldCheck } from "lucide-react";
+import { FileText, Chrome, ShieldCheck, Loader2 } from "lucide-react";
+import { Card, CardContent } from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
 
 export default function Login() {
   const { signIn, signUp, signInWithGoogle } = useAuth();
   const navigate = useNavigate();
 
-  const [isSignUp, setIsSignUp]           = useState(false);
-  const [email, setEmail]                 = useState("");
-  const [password, setPassword]           = useState("");
-  const [adminCode, setAdminCode]         = useState("");
+  const [isSignUp, setIsSignUp] = useState(false);
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
+  const [adminCode, setAdminCode] = useState("");
   const [showAdminCode, setShowAdminCode] = useState(false);
-  const [error, setError]                 = useState("");
-  const [loading, setLoading]             = useState(false);
-  const [message, setMessage]             = useState("");
+  const [error, setError] = useState("");
+  const [loading, setLoading] = useState(false);
+  const [message, setMessage] = useState("");
 
   async function handleSubmit(e) {
     e.preventDefault();
@@ -27,16 +29,17 @@ export default function Login() {
       if (isSignUp) {
         const { error: signUpError } = await signUp(email, password);
         if (signUpError) throw signUpError;
-        setMessage("Confirmation email sent! Please click the link in your inbox to activate your account.");
-        setTimeout(() => { setIsSignUp(false); setMessage(""); }, 6000);
+        setMessage("Confirmation email sent! Click the link in your inbox.");
+        setTimeout(() => {
+          setIsSignUp(false);
+          setMessage("");
+        }, 6000);
       } else {
         const { error: signInError } = await signIn(email, password);
         if (signInError) throw signInError;
 
-        // If admin code field is visible and filled, verify it
         if (showAdminCode && adminCode.trim()) {
           try {
-            // Lazy import so a missing file never breaks the login page
             const { supabase } = await import("@/api/supabaseClient");
             const { data, error: rpcError } = await supabase.rpc("verify_admin_code", {
               input_code: adminCode.trim(),
@@ -66,121 +69,165 @@ export default function Login() {
   }
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-background px-4">
-      {/* Glow */}
-      <div className="absolute inset-0 overflow-hidden pointer-events-none">
-        <div className="absolute top-1/4 left-1/2 -translate-x-1/2 w-96 h-96 bg-primary/10 rounded-full blur-3xl" />
-      </div>
-
-      <div className="w-full max-w-sm relative">
-        {/* Logo */}
-        <div className="text-center mb-8">
-          <div className="w-14 h-14 rounded-2xl bg-primary flex items-center justify-center mx-auto mb-4 shadow-lg shadow-primary/30">
-            <FileText className="w-7 h-7 text-primary-foreground" />
+    <div className="min-h-screen flex items-center justify-center bg-background px-3 py-6">
+      <div className="w-full max-w-[320px] space-y-3">
+        {/* Brand Header */}
+        <div className="text-center space-y-1">
+          <div className="w-9 h-9 mx-auto rounded-xl bg-primary text-primary-foreground flex items-center justify-center shadow-xs">
+            <FileText className="w-4 h-4 stroke-[2.2]" />
           </div>
-          <h1 className="text-2xl font-bold text-foreground">Siva's Chola Invoices</h1>
-          <p className="text-sm text-muted-foreground mt-1">
-            {isSignUp ? "Create your account" : "Sign in to your account"}
+          <h1 className="text-base font-bold tracking-tight text-foreground leading-tight">
+            Siva's Chola
+          </h1>
+          <p className="text-[11px] text-muted-foreground leading-tight">
+            {isSignUp ? "Create merchant account" : "Sign in to your ledger"}
           </p>
         </div>
 
-        {/* Card */}
-        <div className="bg-card border border-border rounded-2xl p-8 shadow-xl">
-          <form onSubmit={handleSubmit} className="space-y-4">
-            <div className="space-y-1.5">
-              <label className="text-sm font-medium text-foreground" htmlFor="email">Email</label>
-              <input
-                id="email" type="email" required autoComplete="email"
-                value={email} onChange={e => setEmail(e.target.value)}
-                placeholder="you@example.com"
-                className="w-full rounded-lg border border-border bg-input px-3 py-2.5 text-sm text-foreground placeholder:text-muted-foreground outline-none focus:ring-2 focus:ring-primary focus:border-primary transition-all"
-              />
-            </div>
-
-            <div className="space-y-1.5">
-              <label className="text-sm font-medium text-foreground" htmlFor="password">Password</label>
-              <input
-                id="password" type="password" required
-                autoComplete={isSignUp ? "new-password" : "current-password"}
-                value={password} onChange={e => setPassword(e.target.value)}
-                placeholder="••••••••"
-                className="w-full rounded-lg border border-border bg-input px-3 py-2.5 text-sm text-foreground placeholder:text-muted-foreground outline-none focus:ring-2 focus:ring-primary focus:border-primary transition-all"
-              />
-            </div>
-
-            {/* Admin code — only shown when toggled on sign-in */}
-            {!isSignUp && showAdminCode && (
-              <div className="space-y-1.5">
-                <label className="text-sm font-medium text-foreground flex items-center gap-1.5" htmlFor="adminCode">
-                  <ShieldCheck className="w-3.5 h-3.5 text-primary" />
-                  Admin Code
+        {/* Compact Form Card */}
+        <Card className="rounded-xl border-border/80 shadow-none bg-card">
+          <CardContent className="p-3.5 space-y-2.5">
+            <form onSubmit={handleSubmit} className="space-y-2">
+              <div className="space-y-0.5">
+                <label
+                  htmlFor="email"
+                  className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground block"
+                >
+                  Email
                 </label>
                 <input
-                  id="adminCode" type="password" autoComplete="off"
-                  value={adminCode} onChange={e => setAdminCode(e.target.value)}
-                  placeholder="Enter secret admin code"
-                  className="w-full rounded-lg border border-primary/40 bg-primary/5 px-3 py-2.5 text-sm text-foreground placeholder:text-muted-foreground outline-none focus:ring-2 focus:ring-primary focus:border-primary transition-all"
+                  id="email"
+                  type="email"
+                  required
+                  autoComplete="email"
+                  value={email}
+                  onChange={(e) => setEmail(e.target.value)}
+                  placeholder="you@example.com"
+                  disabled={loading}
+                  className="w-full rounded-md border border-border bg-background px-2.5 py-1.5 text-xs text-foreground placeholder:text-muted-foreground outline-none focus:border-primary transition-colors disabled:opacity-50"
                 />
               </div>
-            )}
 
-            {error   && <p className="text-sm text-destructive bg-destructive/10 rounded-lg px-3 py-2">{error}</p>}
-            {message && <p className="text-sm text-green-400 bg-green-400/10 rounded-lg px-3 py-2">{message}</p>}
+              <div className="space-y-0.5">
+                <label
+                  htmlFor="password"
+                  className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground block"
+                >
+                  Password
+                </label>
+                <input
+                  id="password"
+                  type="password"
+                  required
+                  autoComplete={isSignUp ? "new-password" : "current-password"}
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
+                  placeholder="••••••••"
+                  disabled={loading}
+                  className="w-full rounded-md border border-border bg-background px-2.5 py-1.5 text-xs text-foreground placeholder:text-muted-foreground outline-none focus:border-primary transition-colors disabled:opacity-50"
+                />
+              </div>
 
-            <button
-              type="submit" disabled={loading}
-              className="w-full rounded-lg bg-primary text-primary-foreground py-2.5 text-sm font-semibold hover:bg-primary/90 transition-all shadow-md shadow-primary/20 disabled:opacity-50 mt-2"
+              {/* Secret Admin Pin Field */}
+              {!isSignUp && showAdminCode && (
+                <div className="space-y-0.5 animate-in fade-in duration-150">
+                  <label
+                    htmlFor="adminCode"
+                    className="text-[10px] font-bold uppercase tracking-wider text-primary flex items-center gap-1 block"
+                  >
+                    <ShieldCheck className="w-3 h-3" />
+                    Admin Code
+                  </label>
+                  <input
+                    id="adminCode"
+                    type="password"
+                    autoComplete="off"
+                    value={adminCode}
+                    onChange={(e) => setAdminCode(e.target.value)}
+                    placeholder="Enter security code"
+                    disabled={loading}
+                    className="w-full rounded-md border border-primary/30 bg-primary/5 px-2.5 py-1.5 text-xs text-foreground placeholder:text-muted-foreground outline-none focus:border-primary transition-colors"
+                  />
+                </div>
+              )}
+
+              {error && (
+                <p className="text-[10px] text-destructive bg-destructive/10 rounded px-2 py-1 leading-snug">
+                  {error}
+                </p>
+              )}
+              {message && (
+                <p className="text-[10px] text-emerald-600 dark:text-emerald-400 bg-emerald-500/10 rounded px-2 py-1 leading-snug">
+                  {message}
+                </p>
+              )}
+
+              <Button
+                type="submit"
+                disabled={loading}
+                className="w-full h-8 px-3 text-xs font-semibold gap-1.5 rounded-lg shadow-none mt-1 active:scale-98 transition-transform"
+              >
+                {loading ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : null}
+                <span>{loading ? "Processing..." : isSignUp ? "Create Account" : "Sign In"}</span>
+              </Button>
+            </form>
+
+            {/* SSO Divider */}
+            <div className="relative my-2">
+              <div className="absolute inset-0 flex items-center">
+                <span className="w-full border-t border-border/60" />
+              </div>
+              <div className="relative flex justify-center text-[9px] uppercase tracking-wider">
+                <span className="bg-card px-1.5 text-muted-foreground">Or</span>
+              </div>
+            </div>
+
+            {/* Google Login Button */}
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => signInWithGoogle()}
+              className="w-full h-8 px-2.5 text-xs gap-1.5 font-medium rounded-lg shadow-none"
             >
-              {loading ? "Please wait…" : isSignUp ? "Create Account" : "Sign In"}
-            </button>
-          </form>
+              <Chrome className="w-3.5 h-3.5" />
+              <span>Google Account</span>
+            </Button>
 
-          {/* Google */}
-          <div className="relative my-6">
-            <div className="absolute inset-0 flex items-center">
-              <span className="w-full border-t border-border" />
+            {/* Footer switcher & subtle admin trigger */}
+            <div className="flex items-center justify-between pt-1 border-t border-border/50 text-[11px]">
+              <p className="text-muted-foreground">
+                {isSignUp ? "Registered?" : "New merchant?"}{" "}
+                <button
+                  type="button"
+                  onClick={() => {
+                    setIsSignUp(!isSignUp);
+                    setError("");
+                    setMessage("");
+                    setShowAdminCode(false);
+                    setAdminCode("");
+                  }}
+                  className="text-primary font-semibold hover:underline ml-0.5"
+                >
+                  {isSignUp ? "Sign In" : "Register"}
+                </button>
+              </p>
+
+              {!isSignUp && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setShowAdminCode((v) => !v);
+                    setAdminCode("");
+                  }}
+                  className="text-muted-foreground/30 hover:text-primary transition-colors p-1"
+                  title="Admin authorization"
+                >
+                  <ShieldCheck className="w-3.5 h-3.5" />
+                </button>
+              )}
             </div>
-            <div className="relative flex justify-center text-xs uppercase">
-              <span className="bg-card px-2 text-muted-foreground">Or continue with</span>
-            </div>
-          </div>
-
-          <button
-            onClick={() => signInWithGoogle()}
-            className="w-full flex items-center justify-center gap-3 rounded-lg border border-border bg-background py-2.5 text-sm font-medium text-foreground hover:bg-accent transition-all shadow-sm"
-          >
-            <Chrome className="w-4 h-4" />
-            Sign in with Google
-          </button>
-
-          <div className="flex items-center justify-between mt-6">
-            <p className="text-sm text-muted-foreground">
-              {isSignUp ? "Already have an account?" : "Don't have an account?"}{" "}
-              <button
-                onClick={() => {
-                  setIsSignUp(!isSignUp);
-                  setError(""); setMessage("");
-                  setShowAdminCode(false); setAdminCode("");
-                }}
-                className="text-primary font-medium hover:underline"
-              >
-                {isSignUp ? "Sign in" : "Sign up"}
-              </button>
-            </p>
-
-            {/* Discreet admin toggle — only on sign-in */}
-            {!isSignUp && (
-              <button
-                type="button"
-                onClick={() => { setShowAdminCode(v => !v); setAdminCode(""); }}
-                className="text-muted-foreground/30 hover:text-muted-foreground/70 transition-colors"
-                title="Admin access"
-              >
-                <ShieldCheck className="w-4 h-4" />
-              </button>
-            )}
-          </div>
-        </div>
+          </CardContent>
+        </Card>
       </div>
     </div>
   );

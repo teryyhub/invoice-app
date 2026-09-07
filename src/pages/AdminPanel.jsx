@@ -12,7 +12,7 @@ import {
 function fmt(dateStr) {
   if (!dateStr) return "—";
   return new Date(dateStr).toLocaleDateString("en-IN", {
-    day: "2-digit", month: "short", year: "numeric",
+    day: "2-digit", month: "short", year: "2-digit",
   });
 }
 
@@ -22,27 +22,32 @@ function initials(email) {
 }
 
 function Chip({ children, green }) {
-  const base = "inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium";
-  const color = green ? "bg-emerald-500/15 text-emerald-500" : "bg-muted text-muted-foreground";
-  return <span className={`${base} ${color}`}>{children}</span>;
+  return (
+    <span className={`inline-flex items-center rounded px-1.5 py-0.5 text-[10px] font-medium leading-none ${
+      green ? "bg-emerald-500/15 text-emerald-500" : "bg-muted text-muted-foreground"
+    }`}>
+      {children}
+    </span>
+  );
 }
 
 function Row({ label, value }) {
   return (
-    <div className="flex items-center justify-between px-4 py-3">
-      <span className="text-xs text-muted-foreground">{label}</span>
-      <span className="text-sm text-foreground">{value}</span>
+    <div className="flex items-center justify-between px-3 py-1.5">
+      <span className="text-[11px] text-muted-foreground">{label}</span>
+      <span className="text-xs text-foreground font-medium">{value}</span>
     </div>
   );
 }
 
 function StatCard({ icon, label, value, accent }) {
-  const border = accent ? "border-primary/30 bg-primary/5" : "border-border bg-card";
   return (
-    <div className={`rounded-xl border p-4 ${border}`}>
-      <div className={`mb-2 ${accent ? "text-primary" : "text-muted-foreground"}`}>{icon}</div>
-      <p className="text-2xl font-bold text-foreground">{value}</p>
-      <p className="text-xs text-muted-foreground mt-0.5">{label}</p>
+    <div className={`rounded-lg border p-2.5 ${accent ? "border-primary/30 bg-primary/5" : "border-border bg-card"}`}>
+      <div className="flex items-center justify-between">
+        <span className="text-[10px] uppercase tracking-wider font-semibold text-muted-foreground">{label}</span>
+        <div className={accent ? "text-primary" : "text-muted-foreground"}>{icon}</div>
+      </div>
+      <p className="text-lg font-black tracking-tight text-foreground leading-tight mt-1">{value}</p>
     </div>
   );
 }
@@ -51,9 +56,9 @@ function StatCard({ icon, label, value, accent }) {
 
 function LoginAsButton({ userId, email }) {
   const [loading, setLoading] = useState(false);
-  const [error, setError]     = useState(null);
-  const [link, setLink]       = useState(null);
-  const [copied, setCopied]   = useState(false);
+  const [error, setError] = useState(null);
+  const [link, setLink] = useState(null);
+  const [copied, setCopied] = useState(false);
 
   async function generateLink(e) {
     e.stopPropagation();
@@ -76,7 +81,7 @@ function LoginAsButton({ userId, email }) {
       });
 
       const json = await res.json();
-      if (!res.ok) throw new Error(json.error || "Failed to generate link");
+      if (!res.ok) throw new Error(json.error || "Failed");
       setLink(json.link);
     } catch (err) {
       setError(err.message);
@@ -90,50 +95,36 @@ function LoginAsButton({ userId, email }) {
     if (!link) return;
     await navigator.clipboard.writeText(link);
     setCopied(true);
-    setTimeout(() => setCopied(false), 3000);
+    setTimeout(() => setCopied(false), 2000);
   }
 
   return (
-    <div className="flex flex-col items-end gap-1.5" onClick={(e) => e.stopPropagation()}>
-      <div className="flex items-center gap-1.5">
+    <div className="flex flex-col items-end gap-1" onClick={(e) => e.stopPropagation()}>
+      <div className="flex items-center gap-1">
         {link && (
           <button
             onClick={copyLink}
-            className="flex items-center gap-1 px-2.5 py-1.5 rounded-lg bg-muted hover:bg-muted/70 text-muted-foreground text-xs font-medium transition-all"
+            className="flex items-center gap-1 px-2 py-1 rounded bg-muted hover:bg-muted/70 text-muted-foreground text-[10px] font-medium"
           >
-            {copied
-              ? <Check className="w-3.5 h-3.5 text-emerald-500" />
-              : <Copy className="w-3.5 h-3.5" />
-            }
-            {copied ? "Copied!" : "Copy"}
+            {copied ? <Check className="w-3 h-3 text-emerald-500" /> : <Copy className="w-3 h-3" />}
+            {copied ? "Copied" : "Copy"}
           </button>
         )}
         <button
           onClick={generateLink}
           disabled={loading}
-          className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-primary/10 hover:bg-primary/20 text-primary text-xs font-medium transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+          className="flex items-center gap-1 px-2 py-1 rounded bg-primary/10 hover:bg-primary/20 text-primary text-[10px] font-semibold disabled:opacity-50"
         >
-          {loading
-            ? <Loader2 className="w-3.5 h-3.5 animate-spin" />
-            : <LogIn className="w-3.5 h-3.5" />
-          }
-          {loading ? "Generating…" : link ? "Regenerate" : "Login as User"}
+          {loading ? <Loader2 className="w-3 h-3 animate-spin" /> : <LogIn className="w-3 h-3" />}
+          {loading ? "..." : link ? "Regen" : "Impersonate"}
         </button>
       </div>
-
-      {link && !copied && (
-        <p className="text-xs text-amber-500 text-right max-w-[220px] leading-tight">
-          Copy → paste in incognito window to login as {email}
+      {link && (
+        <p className={`text-[9px] leading-tight ${copied ? "text-emerald-500" : "text-amber-500"}`}>
+          {copied ? "Paste in Incognito" : "Copy for Incognito"}
         </p>
       )}
-      {copied && (
-        <p className="text-xs text-emerald-500 text-right leading-tight">
-          Paste in an incognito window!
-        </p>
-      )}
-      {error && (
-        <p className="text-xs text-destructive max-w-[200px] text-right">{error}</p>
-      )}
+      {error && <p className="text-[9px] text-destructive max-w-[150px] truncate">{error}</p>}
     </div>
   );
 }
@@ -153,76 +144,75 @@ function UserDrawer({ userId, email, onClose }) {
     enabled: !!userId,
   });
 
-  const invoices       = data?.invoices        ?? [];
+  const invoices = data?.invoices ?? [];
   const vendorProfiles = data?.vendor_profiles ?? [];
-  const profile        = data?.profile         ?? {};
+  const profile = data?.profile ?? {};
 
   return (
     <div className="fixed inset-0 z-50 flex">
-      <div className="flex-1 bg-black/40 backdrop-blur-sm" onClick={onClose} />
-      <div className="w-full max-w-lg bg-card border-l border-border h-full overflow-y-auto flex flex-col shadow-2xl">
-
-        <div className="sticky top-0 bg-card border-b border-border px-6 py-4 flex items-center justify-between z-10">
-          <div className="flex items-center gap-3">
-            <div className="w-9 h-9 rounded-full bg-primary/15 flex items-center justify-center text-primary font-bold text-sm">
+      <div className="flex-1 bg-black/60 backdrop-blur-xs" onClick={onClose} />
+      <div className="w-full max-w-md bg-card border-l border-border h-full overflow-y-auto flex flex-col shadow-xl">
+        <div className="sticky top-0 bg-card border-b border-border/80 px-3.5 py-2.5 flex items-center justify-between z-10">
+          <div className="flex items-center gap-2 min-w-0">
+            <div className="w-7 h-7 rounded-full bg-primary/15 flex items-center justify-center text-primary font-bold text-xs shrink-0">
               {initials(email)}
             </div>
-            <div>
-              <p className="text-sm font-semibold text-foreground truncate max-w-[160px]">{email}</p>
-              <p className="text-xs text-muted-foreground">User profile</p>
+            <div className="min-w-0 leading-tight">
+              <p className="text-xs font-bold text-foreground truncate max-w-[170px]">{email}</p>
+              <p className="text-[10px] text-muted-foreground">Account profile</p>
             </div>
           </div>
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-1.5 shrink-0">
             <LoginAsButton userId={userId} email={email} />
-            <button onClick={onClose} className="p-1.5 rounded-lg hover:bg-muted transition-colors">
-              <X className="w-4 h-4 text-muted-foreground" />
+            <button onClick={onClose} className="p-1 rounded hover:bg-muted text-muted-foreground">
+              <X className="w-4 h-4" />
             </button>
           </div>
         </div>
 
         {isLoading && (
-          <div className="flex-1 flex items-center justify-center">
-            <Loader2 className="w-6 h-6 animate-spin text-primary" />
+          <div className="flex-1 flex items-center justify-center py-10">
+            <Loader2 className="w-5 h-5 animate-spin text-primary" />
           </div>
         )}
 
         {error && (
-          <div className="p-6 m-4 rounded-lg text-sm text-destructive bg-destructive/10">
+          <div className="p-3 m-3 rounded-md text-xs text-destructive bg-destructive/10">
             {error.message}
           </div>
         )}
 
         {data && (
-          <div className="p-6 space-y-6 flex-1">
+          <div className="p-3 space-y-3.5 flex-1">
             <section>
-              <h3 className="text-xs font-semibold uppercase tracking-widest text-muted-foreground mb-3">Account</h3>
-              <div className="rounded-xl border border-border divide-y divide-border">
-                <Row label="User ID"  value={<span className="font-mono text-xs">{profile.id}</span>} />
-                <Row label="Email"    value={profile.email} />
-                <Row label="Joined"   value={fmt(profile.created_at)} />
-                <Row label="Admin"    value={profile.is_admin ? <Chip green>Yes</Chip> : <Chip>No</Chip>} />
-                <Row label="2FA"      value={profile.tfa_enabled ? <Chip green>Enabled</Chip> : <Chip>Disabled</Chip>} />
+              <h3 className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground mb-1.5 px-0.5">Account</h3>
+              <div className="rounded-lg border border-border divide-y divide-border/60 bg-muted/10">
+                <Row label="User ID" value={<span className="font-mono text-[10px]">{profile.id}</span>} />
+                <Row label="Email" value={profile.email} />
+                <Row label="Joined" value={fmt(profile.created_at)} />
+                <Row label="Role" value={profile.is_admin ? <Chip green>Admin</Chip> : <Chip>User</Chip>} />
+                <Row label="2FA" value={profile.tfa_enabled ? <Chip green>On</Chip> : <Chip>Off</Chip>} />
                 {profile.tfa_enabled && (
-                  <Row label="Last verified" value={fmt(profile.last_tfa_verified)} />
+                  <Row label="Verified" value={fmt(profile.last_tfa_verified)} />
                 )}
               </div>
             </section>
 
             <section>
-              <h3 className="text-xs font-semibold uppercase tracking-widest text-muted-foreground mb-3 flex items-center gap-2">
-                <Store className="w-3.5 h-3.5" /> Vendor Profiles ({vendorProfiles.length})
+              <h3 className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground mb-1.5 px-0.5 flex items-center gap-1">
+                <Store className="w-3 h-3" /> Vendor Profiles ({vendorProfiles.length})
               </h3>
               {vendorProfiles.length === 0 ? (
-                <p className="text-sm text-muted-foreground italic">No vendor profiles</p>
+                <p className="text-xs text-muted-foreground italic px-1">None registered</p>
               ) : (
-                <div className="space-y-2">
+                <div className="space-y-1.5">
                   {vendorProfiles.map((v) => (
-                    <div key={v.id} className="rounded-xl border border-border p-4 bg-muted/30">
-                      <p className="font-semibold text-sm text-foreground">{v.business_name || "Unnamed"}</p>
-                      {v.email      && <p className="text-xs text-muted-foreground mt-0.5">{v.email}</p>}
-                      {v.phone      && <p className="text-xs text-muted-foreground">{v.phone}</p>}
-                      {v.address    && <p className="text-xs text-muted-foreground">{v.address}</p>}
-                      {v.gst_number && <p className="text-xs font-mono mt-1 text-primary/80">GST: {v.gst_number}</p>}
+                    <div key={v.id} className="rounded-lg border border-border p-2.5 bg-muted/20 leading-tight">
+                      <p className="font-bold text-xs text-foreground">{v.business_name || "Unnamed"}</p>
+                      {v.email && <p className="text-[10px] text-muted-foreground mt-0.5">{v.email}</p>}
+                      {v.phone && <p className="text-[10px] text-muted-foreground">{v.phone}</p>}
+                      {v.address && <p className="text-[10px] text-muted-foreground truncate">{v.address}</p>}
+                      {v.gst_number && <p className="text-[10px] font-mono mt-0.5 text-primary">GST: {v.gst_number}</p>}
                     </div>
                   ))}
                 </div>
@@ -230,22 +220,22 @@ function UserDrawer({ userId, email, onClose }) {
             </section>
 
             <section>
-              <h3 className="text-xs font-semibold uppercase tracking-widest text-muted-foreground mb-3 flex items-center gap-2">
-                <Receipt className="w-3.5 h-3.5" /> Invoices ({invoices.length})
+              <h3 className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground mb-1.5 px-0.5 flex items-center gap-1">
+                <Receipt className="w-3 h-3" /> Invoices ({invoices.length})
               </h3>
               {invoices.length === 0 ? (
-                <p className="text-sm text-muted-foreground italic">No invoices</p>
+                <p className="text-xs text-muted-foreground italic px-1">No invoices found</p>
               ) : (
-                <div className="space-y-2 max-h-80 overflow-y-auto pr-1">
+                <div className="space-y-1 max-h-56 overflow-y-auto pr-0.5">
                   {invoices.map((inv) => (
-                    <div key={inv.id} className="rounded-xl border border-border p-3 bg-muted/30 flex items-center justify-between gap-3">
-                      <div className="min-w-0">
-                        <p className="font-semibold text-sm text-foreground truncate">{inv.invoice_number || inv.id}</p>
-                        <p className="text-xs text-muted-foreground">{fmt(inv.created_at)}</p>
-                        {inv.customer_name && <p className="text-xs text-muted-foreground truncate">To: {inv.customer_name}</p>}
+                    <div key={inv.id} className="rounded-md border border-border p-2 bg-muted/20 flex items-center justify-between gap-2">
+                      <div className="min-w-0 leading-tight">
+                        <p className="font-semibold text-xs text-foreground truncate">{inv.invoice_number || inv.id}</p>
+                        <p className="text-[10px] text-muted-foreground">{fmt(inv.created_at)}</p>
+                        {inv.customer_name && <p className="text-[9px] text-muted-foreground truncate">{inv.customer_name}</p>}
                       </div>
                       {inv.total != null && (
-                        <span className="text-sm font-semibold text-foreground whitespace-nowrap">
+                        <span className="text-xs font-bold text-foreground whitespace-nowrap">
                           ₹{Number(inv.total).toLocaleString("en-IN")}
                         </span>
                       )}
@@ -266,7 +256,7 @@ function UserDrawer({ userId, email, onClose }) {
 function AdminPanel() {
   const { user, signOut } = useAuth();
   const navigate = useNavigate();
-  const [search, setSearch]             = useState("");
+  const [search, setSearch] = useState("");
   const [selectedUser, setSelectedUser] = useState(null);
 
   const { data: profiles, isLoading, error } = useQuery({
@@ -284,21 +274,23 @@ function AdminPanel() {
   );
 
   const stats = {
-    total:  allProfiles.length,
+    total: allProfiles.length,
     admins: allProfiles.filter((p) => p.is_admin).length,
-    tfa:    allProfiles.filter((p) => p.tfa_enabled).length,
+    tfa: allProfiles.filter((p) => p.tfa_enabled).length,
   };
 
   if (error) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-background px-4">
-        <div className="text-center space-y-4 max-w-sm">
-          <ShieldOff className="w-12 h-12 text-destructive mx-auto" />
-          <h1 className="text-xl font-bold text-foreground">Access Denied</h1>
-          <p className="text-sm text-muted-foreground">{error.message}</p>
-          <button onClick={() => navigate("/", { replace: true })}
-            className="rounded-lg bg-primary text-primary-foreground px-4 py-2 text-sm font-medium">
-            Go to Dashboard
+        <div className="text-center space-y-3 max-w-xs">
+          <ShieldOff className="w-8 h-8 text-destructive mx-auto" />
+          <h1 className="text-base font-bold text-foreground">Access Denied</h1>
+          <p className="text-xs text-muted-foreground">{error.message}</p>
+          <button
+            onClick={() => navigate("/", { replace: true })}
+            className="rounded-md bg-primary text-primary-foreground px-3 py-1.5 text-xs font-semibold"
+          >
+            Back to Dashboard
           </button>
         </div>
       </div>
@@ -306,89 +298,103 @@ function AdminPanel() {
   }
 
   return (
-    <div className="min-h-screen bg-background">
-      <header className="sticky top-0 z-40 bg-card border-b border-border px-4 sm:px-6 py-3 flex items-center justify-between gap-3">
-        <div className="flex items-center gap-3">
-          <button onClick={() => navigate("/", { replace: true })}
-            className="p-1.5 rounded-lg hover:bg-muted transition-colors">
-            <ArrowLeft className="w-4 h-4 text-muted-foreground" />
+    <div className="min-h-screen bg-background pb-8">
+      {/* Header */}
+      <header className="sticky top-0 z-40 bg-card/95 backdrop-blur-md border-b border-border px-3 sm:px-4 py-2 flex items-center justify-between gap-2">
+        <div className="flex items-center gap-2">
+          <button
+            onClick={() => navigate("/", { replace: true })}
+            className="p-1 rounded hover:bg-muted text-muted-foreground"
+          >
+            <ArrowLeft className="w-3.5 h-3.5" />
           </button>
-          <div className="flex items-center gap-2">
-            <div className="w-7 h-7 rounded-lg bg-primary flex items-center justify-center">
-              <ShieldCheck className="w-4 h-4 text-primary-foreground" />
+          <div className="flex items-center gap-1.5">
+            <div className="w-6 h-6 rounded bg-primary text-primary-foreground flex items-center justify-center shrink-0">
+              <ShieldCheck className="w-3.5 h-3.5" />
             </div>
-            <span className="font-bold text-foreground text-sm sm:text-base">Admin Panel</span>
+            <span className="font-bold text-foreground text-xs sm:text-sm">Admin Control</span>
           </div>
         </div>
+
         <div className="flex items-center gap-2">
-          <span className="text-xs text-muted-foreground hidden sm:block truncate max-w-[160px]">{user?.email}</span>
-          <button onClick={async () => { await signOut(); navigate("/login", { replace: true }); }}
-            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-border text-xs font-medium text-muted-foreground hover:text-foreground hover:bg-muted transition-all">
-            <LogOut className="w-3.5 h-3.5" /> Sign out
+          <span className="text-[11px] text-muted-foreground hidden sm:block truncate max-w-[140px]">
+            {user?.email}
+          </span>
+          <button
+            onClick={async () => { await signOut(); navigate("/login", { replace: true }); }}
+            className="flex items-center gap-1 px-2 py-1 rounded border border-border text-[11px] font-medium text-muted-foreground hover:text-foreground hover:bg-muted"
+          >
+            <LogOut className="w-3 h-3" /> Exit
           </button>
         </div>
       </header>
 
-      <main className="max-w-4xl mx-auto px-4 sm:px-6 py-8 space-y-6">
-        <div className="grid grid-cols-3 gap-3">
-          <StatCard icon={<Users className="w-4 h-4" />}       label="Total Users" value={stats.total} />
-          <StatCard icon={<ShieldCheck className="w-4 h-4" />} label="Admins"      value={stats.admins} accent />
-          <StatCard icon={<ShieldCheck className="w-4 h-4" />} label="2FA Active"  value={stats.tfa} />
+      {/* Main Container */}
+      <main className="max-w-3xl mx-auto px-3 sm:px-4 py-3 space-y-2.5">
+        {/* Metric Bar */}
+        <div className="grid grid-cols-3 gap-2">
+          <StatCard icon={<Users className="w-3.5 h-3.5" />} label="Users" value={stats.total} />
+          <StatCard icon={<ShieldCheck className="w-3.5 h-3.5" />} label="Admins" value={stats.admins} accent />
+          <StatCard icon={<ShieldCheck className="w-3.5 h-3.5" />} label="2FA" value={stats.tfa} />
         </div>
 
+        {/* Search */}
         <div className="relative">
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-          <input value={search} onChange={(e) => setSearch(e.target.value)}
-            placeholder="Search users by email…"
-            className="w-full rounded-xl border border-border bg-card pl-9 pr-4 py-2.5 text-sm text-foreground placeholder:text-muted-foreground outline-none focus:ring-2 focus:ring-primary focus:border-primary transition-all"
+          <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-muted-foreground" />
+          <input
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            placeholder="Search email..."
+            className="w-full rounded-lg border border-border bg-card pl-8 pr-3 py-1.5 text-xs text-foreground placeholder:text-muted-foreground outline-none focus:border-primary transition-all"
           />
         </div>
 
-        <div className="rounded-2xl border border-border bg-card overflow-hidden">
-          <div className="px-4 py-3 border-b border-border flex items-center justify-between">
-            <h2 className="text-sm font-semibold text-foreground">
-              {search ? `Results — ${filtered.length}` : "All Users"}
-            </h2>
-            {isLoading && <Loader2 className="w-4 h-4 animate-spin text-muted-foreground" />}
+        {/* User Listing */}
+        <div className="rounded-lg border border-border bg-card overflow-hidden shadow-none">
+          <div className="px-3 py-2 border-b border-border/70 flex items-center justify-between text-xs font-bold text-foreground">
+            <span>{search ? `Results (${filtered.length})` : "All Accounts"}</span>
+            {isLoading && <Loader2 className="w-3.5 h-3.5 animate-spin text-muted-foreground" />}
           </div>
 
           {!isLoading && filtered.length === 0 && (
-            <p className="text-sm text-muted-foreground text-center py-12">
-              {search ? "No users match your search." : "No users found."}
+            <p className="text-xs text-muted-foreground text-center py-6">
+              {search ? "No matches." : "No users found."}
             </p>
           )}
 
-          <ul className="divide-y divide-border">
+          <ul className="divide-y divide-border/60">
             {filtered.map((profile) => (
-              <li key={profile.id}>
-                <div className="w-full flex items-center gap-4 px-4 py-3.5 hover:bg-muted/50 transition-colors">
-                  <button
-                    onClick={() => setSelectedUser({ id: profile.id, email: profile.email })}
-                    className="flex items-center gap-3 flex-1 min-w-0 text-left group"
-                  >
-                    <div className="w-9 h-9 rounded-full bg-primary/10 flex items-center justify-center text-primary font-bold text-sm flex-shrink-0">
-                      {initials(profile.email)}
-                    </div>
-                    <div className="flex-1 min-w-0">
-                      <div className="flex items-center gap-2 flex-wrap">
-                        <p className="text-sm font-medium text-foreground truncate">{profile.email}</p>
-                        {profile.is_admin && (
-                          <span className="inline-flex items-center gap-1 rounded-full bg-primary/10 text-primary px-2 py-0.5 text-xs font-medium">
-                            <ShieldCheck className="w-3 h-3" /> Admin
-                          </span>
-                        )}
-                      </div>
-                      <div className="flex items-center gap-3 mt-0.5">
-                        <span className="flex items-center gap-1 text-xs text-muted-foreground">
-                          <Calendar className="w-3 h-3" /> {fmt(profile.created_at)}
+              <li key={profile.id} className="flex items-center gap-2 px-3 py-2 hover:bg-muted/30 transition-colors">
+                <button
+                  onClick={() => setSelectedUser({ id: profile.id, email: profile.email })}
+                  className="flex items-center gap-2.5 flex-1 min-w-0 text-left group"
+                >
+                  <div className="w-7 h-7 rounded-full bg-primary/10 flex items-center justify-center text-primary font-bold text-xs shrink-0">
+                    {initials(profile.email)}
+                  </div>
+                  <div className="flex-1 min-w-0 leading-tight">
+                    <div className="flex items-center gap-1.5">
+                      <p className="text-xs font-medium text-foreground truncate group-hover:text-primary transition-colors">
+                        {profile.email}
+                      </p>
+                      {profile.is_admin && (
+                        <span className="inline-flex items-center gap-0.5 rounded bg-primary/10 text-primary px-1 py-0.2 text-[9px] font-bold">
+                          Admin
                         </span>
-                        {profile.tfa_enabled && (
-                          <span className="text-xs text-emerald-500 font-medium">2FA on</span>
-                        )}
-                      </div>
+                      )}
                     </div>
-                    <ChevronRight className="w-4 h-4 text-muted-foreground group-hover:text-foreground transition-colors flex-shrink-0" />
-                  </button>
+                    <div className="flex items-center gap-2 mt-0.5 text-[10px] text-muted-foreground">
+                      <span className="flex items-center gap-0.5">
+                        <Calendar className="w-2.5 h-2.5" /> {fmt(profile.created_at)}
+                      </span>
+                      {profile.tfa_enabled && (
+                        <span className="text-emerald-500 font-semibold">2FA</span>
+                      )}
+                    </div>
+                  </div>
+                  <ChevronRight className="w-3.5 h-3.5 text-muted-foreground/60 group-hover:text-foreground shrink-0" />
+                </button>
+                <div className="shrink-0 pl-1 border-l border-border/40">
                   <LoginAsButton userId={profile.id} email={profile.email} />
                 </div>
               </li>

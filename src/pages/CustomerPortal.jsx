@@ -3,7 +3,6 @@ import React, { useState, useEffect, useMemo, useCallback } from "react";
 import { useNavigate } from "react-router-dom";
 import { createClient } from "@supabase/supabase-js";
 import { Card, CardContent } from "@/components/ui/card";
-import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Search, LogOut, Loader2, ShieldCheck, X, Sun, Moon } from "lucide-react";
 import { format } from "date-fns";
@@ -15,33 +14,32 @@ const supabase = createClient(
 
 function toPortalRow(inv) {
   return {
-    id:            inv.id,
-    customerName:  inv.customer_name        || "—",
-    mobile:        inv.customer_mobile      || "—",
+    id: inv.id,
+    customerName: inv.customer_name || "—",
+    mobile: inv.customer_mobile || "—",
     applicationId: inv.delivery_order_number || "—",
-    asset:         [inv.product_description, inv.product_model].filter(Boolean).join(" · ") || "—",
-    imei:          inv.imei_serial          || "—",
-    vendorName:    inv.vendor_name          || "—",
-    date:          inv.invoice_date
-                     ? format(new Date(inv.invoice_date), "dd/MMM/yyyy")
-                     : "—",
-    cost:          inv.grand_total != null
-                     ? `₹${Number(inv.grand_total).toLocaleString("en-IN", { minimumFractionDigits: 2 })}`
-                     : "—",
-    invoiceNo:     inv.invoice_number       || "—",
+    asset: [inv.product_description, inv.product_model].filter(Boolean).join(" · ") || "—",
+    imei: inv.imei_serial || "—",
+    vendorName: inv.vendor_name || "—",
+    date: inv.invoice_date
+      ? format(new Date(inv.invoice_date), "dd/MMM/yy")
+      : "—",
+    cost: inv.grand_total != null
+      ? `₹${Number(inv.grand_total).toLocaleString("en-IN", { minimumFractionDigits: 2 })}`
+      : "—",
+    invoiceNo: inv.invoice_number || "—",
   };
 }
 
 export default function CustomerPortal() {
   const navigate = useNavigate();
   const [portalUser, setPortalUser] = useState(null);
-  const [records,    setRecords]    = useState([]);
-  const [loading,    setLoading]    = useState(false);
-  const [search,     setSearch]     = useState("");
-  const [submitted,  setSubmitted]  = useState(false); // true only after user hits Search
+  const [records, setRecords] = useState([]);
+  const [loading, setLoading] = useState(false);
+  const [search, setSearch] = useState("");
+  const [submitted, setSubmitted] = useState(false);
   const [dark, setDark] = useState(() => document.documentElement.classList.contains("dark"));
 
-  // Guard: redirect to login if no session
   useEffect(() => {
     const stored = sessionStorage.getItem("portal_user");
     if (!stored) { navigate("/portal"); return; }
@@ -69,12 +67,10 @@ export default function CustomerPortal() {
     }
   }, []);
 
-  // Fetch all records once on mount (kept in memory, not shown until search)
   useEffect(() => {
     if (portalUser) fetchRecords();
   }, [portalUser, fetchRecords]);
 
-  // Realtime — update in-memory records silently
   useEffect(() => {
     if (!portalUser) return;
     const channel = supabase
@@ -98,10 +94,9 @@ export default function CustomerPortal() {
     return () => supabase.removeChannel(channel);
   }, [portalUser]);
 
-  // Apply dark mode class to root
   useEffect(() => {
     if (dark) document.documentElement.classList.add("dark");
-    else      document.documentElement.classList.remove("dark");
+    else document.documentElement.classList.remove("dark");
   }, [dark]);
 
   const handleSearch = (e) => {
@@ -120,7 +115,7 @@ export default function CustomerPortal() {
     const q = search.trim().toLowerCase();
     return records.filter(r =>
       r.customerName.toLowerCase().includes(q) ||
-      r.mobile.includes(q)                      ||
+      r.mobile.includes(q)                     ||
       r.applicationId.toLowerCase().includes(q) ||
       r.asset.toLowerCase().includes(q)         ||
       r.imei.toLowerCase().includes(q)          ||
@@ -137,152 +132,149 @@ export default function CustomerPortal() {
   if (!portalUser) return null;
 
   return (
-    <div className="min-h-screen bg-background">
-
-      {/* Top bar */}
-      <div className="border-b border-border bg-card sticky top-0 z-10">
-        <div className="max-w-5xl mx-auto px-4 py-3 flex items-center justify-between gap-3">
-          <div className="flex items-center gap-2">
-            <ShieldCheck className="w-5 h-5 text-primary shrink-0" />
-            <div>
-              <p className="text-sm font-semibold leading-tight">Customer Portal</p>
-              <p className="text-xs text-muted-foreground leading-tight">
-                {portalUser.label || portalUser.login_id}
-              </p>
-            </div>
+    <div className="min-h-screen bg-background pb-6">
+      {/* Top Bar */}
+      <header className="sticky top-0 z-40 bg-card/95 backdrop-blur-md border-b border-border px-3 py-1.5 flex items-center justify-between gap-2">
+        <div className="flex items-center gap-2 min-w-0">
+          <div className="w-7 h-7 rounded-lg bg-primary/10 text-primary flex items-center justify-center shrink-0">
+            <ShieldCheck className="w-4 h-4" />
           </div>
-          <div className="flex items-center gap-2">
-            <button
-              onClick={() => setDark(v => !v)}
-              className="h-8 w-8 flex items-center justify-center rounded-md border border-border bg-background hover:bg-accent transition-colors"
-              title={dark ? "Switch to Light Mode" : "Switch to Dark Mode"}
-            >
-              {dark ? <Sun className="w-4 h-4 text-yellow-500" /> : <Moon className="w-4 h-4 text-muted-foreground" />}
-            </button>
-            <Button variant="outline" size="sm" onClick={handleLogout} className="gap-1">
-            <LogOut className="w-3.5 h-3.5" />
-            <span className="hidden sm:inline">Sign Out</span>
-          </Button>
+          <div className="min-w-0 leading-tight">
+            <p className="text-xs font-bold text-foreground truncate">Customer Portal</p>
+            <p className="text-[10px] text-muted-foreground truncate">
+              {portalUser.label || portalUser.login_id}
+            </p>
           </div>
         </div>
-      </div>
 
-      <div className="max-w-5xl mx-auto px-4 py-10 space-y-6">
+        <div className="flex items-center gap-1.5 shrink-0">
+          <button
+            onClick={() => setDark(v => !v)}
+            className="h-7 w-7 flex items-center justify-center rounded-md border border-border hover:bg-muted transition-colors"
+            title={dark ? "Light Mode" : "Dark Mode"}
+          >
+            {dark ? <Sun className="w-3.5 h-3.5 text-yellow-500" /> : <Moon className="w-3.5 h-3.5 text-muted-foreground" />}
+          </button>
+          <Button variant="outline" size="sm" onClick={handleLogout} className="h-7 px-2 text-[11px] gap-1 font-medium rounded-md">
+            <LogOut className="w-3 h-3" />
+            <span>Exit</span>
+          </Button>
+        </div>
+      </header>
 
-        {/* Search section — centered, prominent */}
-        <div className="max-w-xl mx-auto space-y-3">
-          <h2 className="text-xl font-bold text-foreground text-center">Search Purchase Records</h2>
-          <p className="text-sm text-muted-foreground text-center">
-            Search by customer name, mobile, IMEI, application ID or invoice number
-          </p>
-          <form onSubmit={handleSearch} className="flex gap-2">
+      <main className="max-w-4xl mx-auto px-3 py-3 space-y-2.5">
+        {/* Compact Search Card */}
+        <div className="p-2.5 rounded-lg border border-border bg-card shadow-none space-y-2">
+          <div className="flex items-center justify-between">
+            <span className="text-xs font-bold text-foreground">Record Search</span>
+            <span className="text-[10px] text-muted-foreground">Search by Name, Mobile, IMEI, App ID</span>
+          </div>
+
+          <form onSubmit={handleSearch} className="flex gap-1.5">
             <div className="relative flex-1">
-              <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-              <Input
+              <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-muted-foreground" />
+              <input
                 autoFocus
-                placeholder="Enter name, mobile, IMEI…"
+                placeholder="Enter customer name, mobile, IMEI or App ID..."
                 value={search}
                 onChange={e => { setSearch(e.target.value); if (submitted) setSubmitted(false); }}
-                className="pl-9 pr-9"
+                className="w-full rounded-md border border-border bg-background pl-8 pr-7 py-1 text-xs text-foreground placeholder:text-muted-foreground outline-none focus:border-primary transition-all"
               />
               {search && (
                 <button
                   type="button"
                   onClick={handleClear}
-                  className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
+                  className="absolute right-2 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
                 >
-                  <X className="w-4 h-4" />
+                  <X className="w-3.5 h-3.5" />
                 </button>
               )}
             </div>
-            <Button type="submit" disabled={!search.trim() || loading}>
-              {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : "Search"}
+            <Button type="submit" size="sm" disabled={!search.trim() || loading} className="h-7 px-3 text-[11px] font-semibold rounded-md shadow-none">
+              {loading ? <Loader2 className="w-3 h-3 animate-spin" /> : "Search"}
             </Button>
           </form>
         </div>
 
-        {/* Results */}
+        {/* Results Area */}
         {loading && (
-          <div className="flex justify-center py-10">
-            <Loader2 className="w-7 h-7 animate-spin text-primary" />
+          <div className="flex justify-center py-8">
+            <Loader2 className="w-5 h-5 animate-spin text-primary" />
           </div>
         )}
 
         {submitted && !loading && (
-          <>
-            <p className="text-sm text-muted-foreground text-center">
-              {filtered.length === 0
-                ? `No records found for "${search}"`
-                : `${filtered.length} record${filtered.length !== 1 ? "s" : ""} found`}
-            </p>
+          <div className="space-y-1.5">
+            <div className="flex items-center justify-between px-1">
+              <span className="text-[11px] font-bold text-foreground">
+                {filtered.length === 0 ? "No records found" : `${filtered.length} Results`}
+              </span>
+              <span className="text-[10px] text-muted-foreground">Query: "{search}"</span>
+            </div>
 
             {filtered.length > 0 && (
               <>
-                {/* Desktop table */}
-                <div className="hidden md:block">
-                  <Card>
-                    <CardContent className="p-0">
-                      <table className="w-full text-sm text-left">
-                        <thead className="bg-muted text-muted-foreground text-xs uppercase">
-                          <tr>
-                            <th className="px-4 py-3 font-medium">Customer Name</th>
-                            <th className="px-4 py-3 font-medium">Mobile</th>
-                            <th className="px-4 py-3 font-medium">Application ID</th>
-                            <th className="px-4 py-3 font-medium">Asset</th>
-                            <th className="px-4 py-3 font-medium">IMEI</th>
-                            <th className="px-4 py-3 font-medium">Vendor</th>
-                            <th className="px-4 py-3 font-medium">Date</th>
-                            <th className="px-4 py-3 font-medium text-right">Cost</th>
-                          </tr>
-                        </thead>
-                        <tbody className="divide-y divide-border">
-                          {filtered.map(r => (
-                            <tr key={r.id} className="hover:bg-accent/40 transition-colors">
-                              <td className="px-4 py-3 font-medium">{r.customerName}</td>
-                              <td className="px-4 py-3">{r.mobile}</td>
-                              <td className="px-4 py-3 font-bold font-mono text-base tracking-wide">{r.applicationId}</td>
-                              <td className="px-4 py-3 max-w-[180px]">
-                                <p className="truncate">{r.asset}</p>
-                              </td>
-                              <td className="px-4 py-3 font-bold font-mono text-base tracking-wide">{r.imei}</td>
-                              <td className="px-4 py-3 text-muted-foreground text-sm">{r.vendorName}</td>
-                              <td className="px-4 py-3 whitespace-nowrap">{r.date}</td>
-                              <td className="px-4 py-3 text-right font-semibold">{r.cost}</td>
-                            </tr>
-                          ))}
-                        </tbody>
-                      </table>
-                    </CardContent>
-                  </Card>
+                {/* Desktop View */}
+                <div className="hidden md:block rounded-lg border border-border bg-card overflow-hidden shadow-none">
+                  <table className="w-full text-xs text-left">
+                    <thead className="bg-muted/50 text-muted-foreground text-[10px] uppercase border-b border-border font-semibold">
+                      <tr>
+                        <th className="px-3 py-1.5">Customer</th>
+                        <th className="px-3 py-1.5">Mobile</th>
+                        <th className="px-3 py-1.5">App ID</th>
+                        <th className="px-3 py-1.5">Asset</th>
+                        <th className="px-3 py-1.5">IMEI</th>
+                        <th className="px-3 py-1.5">Vendor</th>
+                        <th className="px-3 py-1.5">Date</th>
+                        <th className="px-3 py-1.5 text-right">Cost</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-border/60">
+                      {filtered.map(r => (
+                        <tr key={r.id} className="hover:bg-muted/30 transition-colors leading-tight">
+                          <td className="px-3 py-2 font-semibold text-foreground">{r.customerName}</td>
+                          <td className="px-3 py-2 text-muted-foreground font-mono text-[11px]">{r.mobile}</td>
+                          <td className="px-3 py-2 font-bold font-mono text-xs tracking-tight text-primary">{r.applicationId}</td>
+                          <td className="px-3 py-2 max-w-[140px] truncate text-muted-foreground">{r.asset}</td>
+                          <td className="px-3 py-2 font-mono text-[11px]">{r.imei}</td>
+                          <td className="px-3 py-2 text-muted-foreground truncate max-w-[100px]">{r.vendorName}</td>
+                          <td className="px-3 py-2 text-muted-foreground whitespace-nowrap">{r.date}</td>
+                          <td className="px-3 py-2 text-right font-bold text-foreground whitespace-nowrap">{r.cost}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
                 </div>
 
-                {/* Mobile cards */}
-                <div className="flex flex-col gap-3 md:hidden">
+                {/* Mobile View */}
+                <div className="grid grid-cols-1 gap-1.5 md:hidden">
                   {filtered.map(r => (
-                    <Card key={r.id}>
-                      <CardContent className="p-4 space-y-2">
+                    <Card key={r.id} className="rounded-lg border-border/80 shadow-none">
+                      <CardContent className="p-2.5 space-y-1.5 leading-tight">
                         <div className="flex items-start justify-between gap-2">
-                          <p className="font-semibold text-base leading-tight">{r.customerName}</p>
-                          <span className="text-sm font-bold text-primary whitespace-nowrap">{r.cost}</span>
-                        </div>
-                        <p className="text-sm text-muted-foreground">{r.mobile}</p>
-                        <div className="space-y-1.5">
-                          <div className="flex items-center gap-2 flex-wrap">
-                            <span className="text-xs text-muted-foreground font-medium">App ID:</span>
-                            <span className="font-bold font-mono text-base tracking-wide">{r.applicationId}</span>
+                          <div className="min-w-0">
+                            <p className="font-bold text-xs text-foreground truncate">{r.customerName}</p>
+                            <p className="text-[10px] text-muted-foreground font-mono">{r.mobile}</p>
                           </div>
-                          <div className="flex items-center gap-2 flex-wrap">
-                            <span className="text-xs text-muted-foreground font-medium">IMEI:</span>
-                            <span className="font-bold font-mono text-base tracking-wide">{r.imei}</span>
-                          </div>
-                          <p className="text-xs text-muted-foreground">
-                            <span className="font-medium text-foreground">Vendor:</span> {r.vendorName}
-                          </p>
+                          <span className="text-xs font-black text-primary shrink-0">{r.cost}</span>
                         </div>
-                        <p className="text-sm">{r.asset}</p>
-                        <div className="flex items-center justify-between pt-1 border-t border-border">
-                          <span className="text-xs text-muted-foreground">Invoice: {r.invoiceNo}</span>
-                          <span className="text-xs text-muted-foreground">{r.date}</span>
+
+                        <div className="grid grid-cols-2 gap-1.5 p-1.5 rounded bg-muted/30 border border-border/40 text-[11px]">
+                          <div>
+                            <span className="text-[9px] uppercase tracking-wider text-muted-foreground block">App ID</span>
+                            <span className="font-bold font-mono text-primary text-xs">{r.applicationId}</span>
+                          </div>
+                          <div>
+                            <span className="text-[9px] uppercase tracking-wider text-muted-foreground block">IMEI</span>
+                            <span className="font-mono text-[10px] break-all">{r.imei}</span>
+                          </div>
+                        </div>
+
+                        <p className="text-[11px] text-muted-foreground truncate">{r.asset}</p>
+
+                        <div className="flex items-center justify-between pt-1 border-t border-border/50 text-[10px] text-muted-foreground">
+                          <span className="truncate max-w-[160px]">Vendor: {r.vendorName}</span>
+                          <span className="whitespace-nowrap">{r.date}</span>
                         </div>
                       </CardContent>
                     </Card>
@@ -290,18 +282,17 @@ export default function CustomerPortal() {
                 </div>
               </>
             )}
-          </>
-        )}
-
-        {/* Empty state before any search */}
-        {!submitted && !loading && (
-          <div className="text-center py-16 text-muted-foreground">
-            <Search className="w-10 h-10 mx-auto mb-3 opacity-20" />
-            <p className="text-sm">Enter a search term above to find records</p>
           </div>
         )}
 
-      </div>
+        {/* Empty State */}
+        {!submitted && !loading && (
+          <div className="text-center py-12 text-muted-foreground">
+            <Search className="w-8 h-8 mx-auto mb-2 opacity-20" />
+            <p className="text-xs">Search using any customer or transaction identifier</p>
+          </div>
+        )}
+      </main>
     </div>
   );
 }

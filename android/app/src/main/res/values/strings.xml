@@ -1,0 +1,7 @@
+<?xml version='1.0' encoding='utf-8'?>
+<resources>
+    <string name="app_name">sivcholainv</string>
+    <string name="title_activity_main">sivcholainv</string>
+    <string name="package_name">com.sivcholainv.app</string>
+    <string name="custom_url_scheme">com.sivcholainv.app</string>
+</resources>
