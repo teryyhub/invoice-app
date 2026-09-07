@@ -200,7 +200,7 @@ export default function AppLayout() {
                 <ChevronRight className="w-3 h-3 text-muted-foreground" />
               </div>
               <span className="text-[9px] font-medium text-emerald-600 dark:text-emerald-400">
-                Verified Merchant
+                This page is for Internal Use only, do not share.
               </span>
             </div>
           </button>
@@ -229,7 +229,7 @@ export default function AppLayout() {
                   <h2 className="text-xs font-bold text-foreground truncate">
                     {user?.email || "Siva's Chola"}
                   </h2>
-                  <p className="text-[10px] text-muted-foreground">GST & Operations Suite</p>
+                  <p className="text-[10px] text-muted-foreground">Internal Use Only</p>
                 </div>
               </div>
               <button
