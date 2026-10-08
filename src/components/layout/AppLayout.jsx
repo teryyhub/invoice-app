@@ -1,4 +1,3 @@
-// src/components/layout/AppLayout.jsx
 import React, { useState, useEffect } from "react";
 import { Outlet, Link, useLocation, useNavigate } from "react-router-dom";
 import {
@@ -12,10 +11,10 @@ import {
   Grid,
   X,
   ChevronRight,
-  ShieldCheck,
   Users,
   Search,
   ShieldAlert,
+  Calculator,
 } from "lucide-react";
 import { useAuth } from "@/lib/AuthContext";
 import { cn } from "@/lib/utils";
@@ -32,8 +31,9 @@ const serviceGroups = [
     ],
   },
   {
-    category: "Portals & Search",
+    category: "Calculators & Portals",
     items: [
+      { path: "/emi-calculator", label: "EMI Calculator", sublabel: "Schedule & Principal", icon: Calculator },
       { path: "/portal", label: "Customer Portal", sublabel: "Public Lookup", icon: Search },
       { path: "/reports", label: "Reports", sublabel: "Tax & GST", icon: BarChart2 },
     ],
@@ -162,7 +162,7 @@ export default function AppLayout() {
             </div>
             <button
               onClick={handleLogout}
-              className="p-1 rounded text-muted-foreground hover:text-destructive transition-colors shrink-0"
+              className="p-1 rounded text-muted-foreground hover:text-destructive transition-colors shrink-0 cursor-pointer"
               title="Sign Out"
             >
               <LogOut className="w-3.5 h-3.5" />
@@ -183,7 +183,7 @@ export default function AppLayout() {
         <div className="flex items-center justify-between px-3 py-1.5">
           <button
             onClick={() => setDrawerOpen(true)}
-            className="flex items-center gap-2 text-left focus:outline-none"
+            className="flex items-center gap-2 text-left focus:outline-none cursor-pointer"
             aria-label="Account details"
           >
             <div className="relative shrink-0">
@@ -234,7 +234,7 @@ export default function AppLayout() {
               </div>
               <button
                 onClick={() => setDrawerOpen(false)}
-                className="p-1 rounded-full text-muted-foreground hover:bg-accent"
+                className="p-1 rounded-full text-muted-foreground hover:bg-accent cursor-pointer"
               >
                 <X className="w-4 h-4" />
               </button>
@@ -290,7 +290,7 @@ export default function AppLayout() {
             <div className="pt-1.5 border-t border-border/60">
               <button
                 onClick={handleLogout}
-                className="w-full flex items-center justify-center gap-1.5 py-2 px-3 rounded-lg text-xs font-semibold text-destructive bg-destructive/10 active:scale-98 transition-transform"
+                className="w-full flex items-center justify-center gap-1.5 py-2 px-3 rounded-lg text-xs font-semibold text-destructive bg-destructive/10 active:scale-98 transition-transform cursor-pointer"
               >
                 <LogOut className="w-3.5 h-3.5" />
                 Sign Out
@@ -336,7 +336,7 @@ export default function AppLayout() {
                 <button
                   key={tab.id}
                   onClick={() => setDrawerOpen(true)}
-                  className="flex flex-col items-center justify-center flex-1 py-0.5 text-muted-foreground hover:text-foreground active:scale-95 transition-transform"
+                  className="flex flex-col items-center justify-center flex-1 py-0.5 text-muted-foreground hover:text-foreground active:scale-95 transition-transform cursor-pointer"
                 >
                   <Icon className="w-4 h-4" />
                   <span className="text-[9px] font-medium leading-none mt-0.5">

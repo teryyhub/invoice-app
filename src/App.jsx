@@ -1,4 +1,3 @@
-// src/App.jsx
 import { Toaster } from "sonner";
 import { QueryClientProvider } from "@tanstack/react-query";
 import { queryClientInstance } from "@/lib/query-client";
@@ -7,23 +6,24 @@ import PageNotFound from "./lib/PageNotFound";
 import { AuthProvider, useAuth } from "@/lib/AuthContext";
 import { ThemeProvider } from "@/lib/ThemeProvider";
 
-import AppLayout              from "./components/layout/AppLayout";
-import Dashboard              from "./pages/Dashboard";
-import GenerateInvoice        from "./pages/GenerateInvoice";
-import InvoiceList            from "./pages/InvoiceList";
-import InvoiceView            from "./pages/InvoiceView";
-import VendorSettings         from "./pages/VendorSettings";
-import Reports                from "./pages/Reports";
-import Customers              from "./pages/Customers";
-import ProfileSettings        from "./pages/ProfileSettings";
-import Statistics             from "./pages/Statistics";
-import Login                  from "./pages/Login";
-import VerifyOtp              from "./pages/VerifyOtp";
-import ResetPassword          from "./pages/ResetPassword";
-import AdminPanel             from "./pages/AdminPanel";
-import AuthAdminCallback      from "./pages/AuthAdminCallback";
-import CustomerPortalLogin    from "./pages/CustomerPortalLogin";
-import CustomerPortal         from "./pages/CustomerPortal";
+import AppLayout            from "./components/layout/AppLayout";
+import Dashboard            from "./pages/Dashboard";
+import GenerateInvoice      from "./pages/GenerateInvoice";
+import InvoiceList          from "./pages/InvoiceList";
+import InvoiceView          from "./pages/InvoiceView";
+import VendorSettings       from "./pages/VendorSettings";
+import Reports              from "./pages/Reports";
+import Customers            from "./pages/Customers";
+import ProfileSettings      from "./pages/ProfileSettings";
+import Statistics           from "./pages/Statistics";
+import EmiCalculator        from "./pages/EmiCalculator";
+import Login                from "./pages/Login";
+import VerifyOtp            from "./pages/VerifyOtp";
+import ResetPassword        from "./pages/ResetPassword";
+import AdminPanel           from "./pages/AdminPanel";
+import AuthAdminCallback    from "./pages/AuthAdminCallback";
+import CustomerPortalLogin  from "./pages/CustomerPortalLogin";
+import CustomerPortal       from "./pages/CustomerPortal";
 
 const AuthenticatedApp = () => {
   const { isLoadingAuth, user } = useAuth();
@@ -49,6 +49,7 @@ const AuthenticatedApp = () => {
         <Route path="/customers"  element={<Customers />} />
         <Route path="/profile"    element={<ProfileSettings />} />
         <Route path="/statistics" element={<Statistics />} />
+        <Route path="/emi-calculator" element={<EmiCalculator />} />
       </Route>
       <Route path="/invoice/:id" element={<InvoiceView />} />
       <Route path="/admin"       element={<AdminPanel />} />
@@ -71,7 +72,7 @@ function App() {
               <Route path="/admin-callback" element={<AuthAdminCallback />} />
 
               {/* Customer portal — separate auth, no admin login needed */}
-              <Route path="/portal"           element={<CustomerPortalLogin />} />
+              <Route path="/portal"          element={<CustomerPortalLogin />} />
               <Route path="/portal/dashboard" element={<CustomerPortal />} />
 
               {/* Authenticated admin/staff routes */}
