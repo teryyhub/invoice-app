@@ -1,9 +1,10 @@
 import React, { useState, useMemo, useRef, useEffect } from "react";
-import { Calculator, Share2, Info, Calendar, Percent, Settings, X, CreditCard, AlertCircle, Printer, Sliders, CheckCircle, ShieldAlert } from "lucide-react";
+import { Calculator, Share2, Info, Calendar, Percent, Settings, X, CreditCard, AlertCircle, Printer, Sliders, CheckCircle, ShieldAlert, Download } from "lucide-react";
 
 export default function EmiCalculator() {
   const [emi, setEmi] = useState("");
   const [tenureMonths, setTenureMonths] = useState("");
+  const [loanNo, setLoanNo] = useState("");
   const [firstEmiDate, setFirstEmiDate] = useState(() => {
     const today = new Date();
     const year = today.getFullYear();
@@ -16,6 +17,7 @@ export default function EmiCalculator() {
   const [isOptionsOpen, setIsOptionsOpen] = useState(false);
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
   const [defaultDay, setDefaultDay] = useState("5");
+  const [isDownloading, setIsDownloading] = useState(false);
   
   const scheduleRef = useRef(null);
   const containerRef = useRef(null);
@@ -115,10 +117,43 @@ export default function EmiCalculator() {
     window.print();
   };
 
+  const handleDownloadJpg = async () => {
+    if (!scheduleRef.current) return;
+    setIsDownloading(true);
+    try {
+      // Dynamically load html2canvas if not already available
+      if (!window.html2canvas) {
+        await new Promise((resolve, reject) => {
+          const script = document.createElement("script");
+          script.src = "https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js";
+          script.onload = resolve;
+          script.onerror = reject;
+          document.head.appendChild(script);
+        });
+      }
+
+      const canvas = await window.html2canvas(scheduleRef.current, {
+        scale: 2,
+        useCORS: true,
+        backgroundColor: "#ffffff",
+      });
+
+      const image = canvas.toDataURL("image/jpeg", 0.95);
+      const link = document.createElement("a");
+      link.href = image;
+      link.download = `Repayment_Schedule_${loanNo ? loanNo : 'Chola'}.jpg`;
+      link.click();
+    } catch (error) {
+      console.error("Failed to generate JPG image:", error);
+      alert("Failed to download JPG. Please try printing or use another browser.");
+    } finally {
+      setIsDownloading(false);
+    }
+  };
+
   const safeSchedule = Array.isArray(schedule) ? schedule : [];
   const totalItems = safeSchedule.length;
 
-  // Max 12 rows per column, max 2 columns (up to 24 items total)
   let layoutMode = 1;
   if (totalItems > 12) {
     layoutMode = 2;
@@ -143,7 +178,6 @@ export default function EmiCalculator() {
         .telugu-text {
           font-family: 'Anek Telugu', sans-serif !important;
         }
-        /* Strict single-page A4 dimensions preventing overflow */
         .fixed-a4-model {
           width: 794px !important;
           min-width: 794px !important;
@@ -158,7 +192,6 @@ export default function EmiCalculator() {
           -webkit-print-color-adjust: exact !important;
           print-color-adjust: exact !important;
         }
-        /* Instructions, insurance policy, and important notice set to 12.5px */
         .fixed-a4-model .instructions-section, 
         .fixed-a4-model .instructions-section p, 
         .fixed-a4-model .instructions-section li, 
@@ -178,7 +211,6 @@ export default function EmiCalculator() {
           -webkit-print-color-adjust: exact !important;
           print-color-adjust: exact !important;
         }
-        /* Table headers increased by 1.5x (15px) */
         .fixed-a4-model table th {
           font-size: 15px !important;
           letter-spacing: -0.5px;
@@ -188,7 +220,6 @@ export default function EmiCalculator() {
           -webkit-print-color-adjust: exact !important;
           print-color-adjust: exact !important;
         }
-        /* Table data increased by 1.5x (15px) */
         .fixed-a4-model table td {
           font-size: 15px !important;
           letter-spacing: -0.5px;
@@ -299,14 +330,24 @@ export default function EmiCalculator() {
             Settings
           </button>
           {isGenerated && (
-            <button
-              onClick={handlePrint}
-              disabled={totalItems === 0}
-              className="inline-flex items-center gap-2 px-3 py-2 bg-primary text-primary-foreground text-sm font-medium rounded-lg hover:opacity-90 transition shadow-sm disabled:opacity-50 cursor-pointer"
-            >
-              <Printer className="w-4 h-4" />
-              Print A4
-            </button>
+            <>
+              <button
+                onClick={handleDownloadJpg}
+                disabled={totalItems === 0 || isDownloading}
+                className="inline-flex items-center gap-2 px-3 py-2 bg-secondary text-secondary-foreground text-sm font-medium rounded-lg hover:bg-secondary/85 transition shadow-sm disabled:opacity-50 cursor-pointer"
+              >
+                <Download className="w-4 h-4 text-primary" />
+                {isDownloading ? "Generating..." : "Download JPG"}
+              </button>
+              <button
+                onClick={handlePrint}
+                disabled={totalItems === 0}
+                className="inline-flex items-center gap-2 px-3 py-2 bg-primary text-primary-foreground text-sm font-medium rounded-lg hover:opacity-90 transition shadow-sm disabled:opacity-50 cursor-pointer"
+              >
+                <Printer className="w-4 h-4" />
+                Print A4
+              </button>
+            </>
           )}
         </div>
       </div>
@@ -331,6 +372,19 @@ export default function EmiCalculator() {
           </h2>
 
           <div className="space-y-3">
+            <div className="space-y-1">
+              <label className="text-xs font-medium text-foreground flex justify-between">
+                <span>Loan Number</span>
+              </label>
+              <input
+                type="text"
+                placeholder="e.g. CHOLA12345678"
+                value={loanNo}
+                onChange={(e) => setLoanNo(e.target.value)}
+                className="w-full px-3 py-1.5 bg-background border border-border rounded-lg text-foreground text-xs focus:outline-none focus:ring-2 focus:ring-primary"
+              />
+            </div>
+
             <div className="space-y-1">
               <label className="text-xs font-medium text-foreground flex justify-between">
                 <span>Monthly EMI Amount</span>
@@ -422,8 +476,8 @@ export default function EmiCalculator() {
           <div 
             id="printable-schedule-wrapper"
             style={{ 
-              width: `${794 * scale}px`, 
-              height: `${1122 * scale}px`,
+              width: `${794 / scale}px`, 
+              height: `${1122 / scale}px`,
               transition: 'width 0.2s ease, height 0.2s ease'
             }}
             className="relative shrink-0 flex items-start justify-center"
@@ -440,7 +494,7 @@ export default function EmiCalculator() {
               className="fixed-a4-model bg-white text-gray-900 border border-gray-400 p-2.5 space-y-1 flex flex-col justify-start"
             >
               <div className="space-y-1">
-                {/* Template Header Card with Increased Chola One App QR Code Size */}
+                {/* Template Header Card with Loan Number & QR Code */}
                 <div className="bg-[#153f74] text-white border border-[#153f74] relative" style={{ backgroundColor: '#153f74', WebkitPrintColorAdjust: 'exact', printColorAdjust: 'exact' }}>
                   <div className="absolute right-2 top-1 bg-white p-1 rounded border border-blue-900 flex flex-col items-center justify-center text-center shadow-xs" style={{ backgroundColor: '#ffffff', WebkitPrintColorAdjust: 'exact', printColorAdjust: 'exact' }}>
                     <img 
@@ -452,8 +506,8 @@ export default function EmiCalculator() {
                   </div>
 
                   <div className="py-0.5 text-center bg-[#153f74] border-b border-blue-800 flex justify-between items-center px-3 pr-20" style={{ backgroundColor: '#153f74', WebkitPrintColorAdjust: 'exact', printColorAdjust: 'exact' }}>
-                    <h2 className="text-xs font-extrabold uppercase tracking-widest text-white">
-                      Repayment Schedule
+                    <h2 className="text-xs font-extrabold uppercase tracking-widest text-white flex items-center gap-2">
+                      Repayment Schedule {loanNo ? <span className="bg-blue-900/80 px-2 py-0.5 rounded text-[11px] text-blue-100">Loan No: {loanNo}</span> : null}
                     </h2>
                     <span className="text-[10px] font-medium bg-blue-900/60 px-2 py-0.2 rounded text-blue-100">
                       Insurance: {isDeviceInsurance ? "Available (Yes)" : "Not Available (No)"}
@@ -580,7 +634,7 @@ export default function EmiCalculator() {
                   </ol>
                 </div>
 
-                {/* Conditional Device Insurance / Uninsured Policy Box with Increased ACKO App QR Code Size */}
+                {/* Conditional Device Insurance / Uninsured Policy Box */}
                 {isDeviceInsurance ? (
                   <div className="insurance-policy-box bg-blue-50 p-1.5 border border-blue-300 text-blue-950 flex justify-between items-center gap-2" style={{ backgroundColor: '#eff6ff', WebkitPrintColorAdjust: 'exact', printColorAdjust: 'exact' }}>
                     <div className="space-y-0.2 flex-1">
@@ -607,7 +661,7 @@ export default function EmiCalculator() {
                         </li>
                       </ul>
                     </div>
-                    {/* ACKO App QR Code (Increased Size) */}
+                    {/* ACKO App QR Code */}
                     <div className="bg-white p-1 rounded border border-blue-300 shrink-0 flex flex-col items-center justify-center text-center shadow-xs" style={{ backgroundColor: '#ffffff', WebkitPrintColorAdjust: 'exact', printColorAdjust: 'exact' }}>
                       <img 
                         src={`https://api.qrserver.com/v1/create-qr-code/?size=90x90&data=${encodeURIComponent("https://play.google.com/store/apps/details?id=com.acko.android")}`} 
@@ -672,6 +726,19 @@ export default function EmiCalculator() {
             </div>
 
             <div className="space-y-3">
+              <div className="space-y-1">
+                <label className="text-xs font-medium text-gray-800 flex justify-between">
+                  <span>Loan Number</span>
+                </label>
+                <input
+                  type="text"
+                  placeholder="e.g. CHOLA12345678"
+                  value={loanNo}
+                  onChange={(e) => setLoanNo(e.target.value)}
+                  className="w-full px-3 py-1.5 bg-white border border-gray-400 rounded text-gray-900 text-xs focus:outline-none focus:ring-1 focus:ring-[#153f74]"
+                />
+              </div>
+
               <div className="space-y-1">
                 <label className="text-xs font-medium text-gray-800 flex justify-between">
                   <span>Monthly EMI Amount</span>
@@ -740,12 +807,20 @@ export default function EmiCalculator() {
               </div>
             </div>
 
-            <div className="pt-2 border-t border-gray-300">
+            <div className="pt-2 border-t border-gray-300 flex gap-2">
+              <button
+                onClick={handleDownloadJpg}
+                disabled={isDownloading}
+                className="flex-1 py-2 bg-secondary text-secondary-foreground font-bold text-xs rounded hover:bg-secondary/85 cursor-pointer flex items-center justify-center gap-1"
+              >
+                <Download className="w-3.5 h-3.5 text-[#153f74]" />
+                {isDownloading ? "Exporting..." : "Download JPG"}
+              </button>
               <button
                 onClick={() => setIsOptionsOpen(false)}
-                className="w-full py-2 bg-[#153f74] text-white font-bold text-xs rounded hover:bg-[#0d2a4e] cursor-pointer"
+                className="flex-1 py-2 bg-[#153f74] text-white font-bold text-xs rounded hover:bg-[#0d2a4e] cursor-pointer"
               >
-                Apply & Update
+                Apply & Close
               </button>
             </div>
           </div>
