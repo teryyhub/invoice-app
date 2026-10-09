@@ -121,7 +121,6 @@ export default function EmiCalculator() {
     if (!scheduleRef.current) return;
     setIsDownloading(true);
     try {
-      // Dynamically load html2canvas if not already available
       if (!window.html2canvas) {
         await new Promise((resolve, reject) => {
           const script = document.createElement("script");
@@ -132,13 +131,22 @@ export default function EmiCalculator() {
         });
       }
 
+      // Temporarily reset transform scale for highest possible crisp rendering
+      const originalTransform = scheduleRef.current.style.transform;
+      scheduleRef.current.style.transform = "scale(1)";
+
       const canvas = await window.html2canvas(scheduleRef.current, {
-        scale: 2,
+        scale: 4, // Increased multiplier for ultra-sharp clarity
         useCORS: true,
         backgroundColor: "#ffffff",
+        windowWidth: 794,
+        windowHeight: 1120,
       });
 
-      const image = canvas.toDataURL("image/jpeg", 0.95);
+      // Restore UI transform scale
+      scheduleRef.current.style.transform = originalTransform;
+
+      const image = canvas.toDataURL("image/jpeg", 1.0); // Maximum quality
       const link = document.createElement("a");
       link.href = image;
       link.download = `Repayment_Schedule_${loanNo ? loanNo : 'Chola'}.jpg`;
@@ -337,7 +345,7 @@ export default function EmiCalculator() {
                 className="inline-flex items-center gap-2 px-3 py-2 bg-secondary text-secondary-foreground text-sm font-medium rounded-lg hover:bg-secondary/85 transition shadow-sm disabled:opacity-50 cursor-pointer"
               >
                 <Download className="w-4 h-4 text-primary" />
-                {isDownloading ? "Generating..." : "Download JPG"}
+                {isDownloading ? "Exporting..." : "Download JPG"}
               </button>
               <button
                 onClick={handlePrint}
