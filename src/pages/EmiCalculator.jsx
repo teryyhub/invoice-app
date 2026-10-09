@@ -131,12 +131,15 @@ export default function EmiCalculator() {
         });
       }
 
-      // Temporarily reset transform scale for highest possible crisp rendering
+      // Temporarily remove transform scaling for uncompressed crisp rendering
       const originalTransform = scheduleRef.current.style.transform;
       scheduleRef.current.style.transform = "scale(1)";
 
+      // Dynamically detect mobile pixel multiplier to prevent low-res downsampling on phones
+      const mobileScale = Math.max(window.devicePixelRatio || 1, 3);
+
       const canvas = await window.html2canvas(scheduleRef.current, {
-        scale: 4, // Increased multiplier for ultra-sharp clarity
+        scale: mobileScale,
         useCORS: true,
         backgroundColor: "#ffffff",
         windowWidth: 794,
@@ -146,7 +149,7 @@ export default function EmiCalculator() {
       // Restore UI transform scale
       scheduleRef.current.style.transform = originalTransform;
 
-      const image = canvas.toDataURL("image/jpeg", 1.0); // Maximum quality
+      const image = canvas.toDataURL("image/jpeg", 1.0);
       const link = document.createElement("a");
       link.href = image;
       link.download = `Repayment_Schedule_${loanNo ? loanNo : 'Chola'}.jpg`;
