@@ -1,5 +1,5 @@
 import React, { useState, useMemo, useRef, useEffect } from "react";
-import { Calculator, Share2, Info, Calendar, Percent, Settings, X, CreditCard, AlertCircle, Printer, Sliders, CheckCircle, ShieldAlert, Download, Palette } from "lucide-react";
+import { Calculator, Share2, Info, Calendar, Percent, Settings, X, CreditCard, AlertCircle, Printer, Sliders, CheckCircle, ShieldAlert, Download, Palette, FileText } from "lucide-react";
 
 export default function EmiCalculator() {
   const [emi, setEmi] = useState("");
@@ -22,6 +22,7 @@ export default function EmiCalculator() {
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
   const [defaultDay, setDefaultDay] = useState("5");
   const [isDownloading, setIsDownloading] = useState(false);
+  const [isPdfDownloading, setIsPdfDownloading] = useState(false);
   
   const scheduleRef = useRef(null);
   const containerRef = useRef(null);
@@ -184,6 +185,60 @@ export default function EmiCalculator() {
     }
   };
 
+  const handleDownloadPdf = async () => {
+    if (!scheduleRef.current) return;
+    setIsPdfDownloading(true);
+    try {
+      if (!window.html2canvas) {
+        await new Promise((resolve, reject) => {
+          const script = document.createElement("script");
+          script.src = "https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js";
+          script.onload = resolve;
+          script.onerror = reject;
+          document.head.appendChild(script);
+        });
+      }
+
+      if (!window.jspdf) {
+        await new Promise((resolve, reject) => {
+          const script = document.createElement("script");
+          script.src = "https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js";
+          script.onload = resolve;
+          script.onerror = reject;
+          document.head.appendChild(script);
+        });
+      }
+
+      const originalTransform = scheduleRef.current.style.transform;
+      scheduleRef.current.style.transform = "scale(1)";
+
+      const canvas = await window.html2canvas(scheduleRef.current, {
+        scale: 2,
+        useCORS: true,
+        backgroundColor: "#ffffff",
+        windowWidth: 794,
+        windowHeight: 1120,
+      });
+
+      scheduleRef.current.style.transform = originalTransform;
+
+      const imgData = canvas.toDataURL("image/jpeg", 1.0);
+      const { jsPDF } = window.jspdf;
+      const pdf = new jsPDF("p", "mm", "a4");
+      
+      const pdfWidth = pdf.internal.pageSize.getWidth();
+      const pdfHeight = pdf.internal.pageSize.getHeight();
+      
+      pdf.addImage(imgData, "JPEG", 0, 0, pdfWidth, pdfHeight);
+      pdf.save(`Repayment_Schedule_${loanNo ? loanNo : 'Chola'}.pdf`);
+    } catch (error) {
+      console.error("Failed to generate PDF document:", error);
+      alert("Failed to download PDF. Please try again.");
+    } finally {
+      setIsPdfDownloading(false);
+    }
+  };
+
   const safeSchedule = Array.isArray(schedule) ? schedule : [];
   const totalItems = safeSchedule.length;
 
@@ -232,7 +287,6 @@ export default function EmiCalculator() {
           font-size: 11px !important;
           line-height: 1.2 !important;
         }
-        /* Increased font size by +1.5px (from 11px to 12.5px) for Insurance & Important Notice sections */
         .fixed-a4-model .insurance-policy-box,
         .fixed-a4-model .insurance-policy-box p,
         .fixed-a4-model .insurance-policy-box li,
@@ -268,6 +322,33 @@ export default function EmiCalculator() {
           -webkit-print-color-adjust: exact !important;
           print-color-adjust: exact !important;
         }
+
+        /* PRINT STYLES: Hide everything except the printable A4 model */
+        @media print {
+          body * {
+            visibility: hidden !important;
+          }
+          #printable-schedule-wrapper, #printable-schedule-wrapper * {
+            visibility: visible !important;
+          }
+          #printable-schedule-wrapper {
+            position: absolute !important;
+            left: 0 !important;
+            top: 0 !important;
+            width: 100% !important;
+            height: 100% !important;
+            margin: 0 !important;
+            padding: 0 !important;
+          }
+          .fixed-a4-model {
+            transform: none !important;
+            position: relative !important;
+            left: 0 !important;
+            top: 0 !important;
+            border: none !important;
+            box-shadow: none !important;
+          }
+        }
       `}</style>
 
       {/* Minimal Header */}
@@ -293,12 +374,20 @@ export default function EmiCalculator() {
           {isGenerated && (
             <>
               <button
+                onClick={handleDownloadPdf}
+                disabled={totalItems === 0 || isPdfDownloading}
+                className="inline-flex items-center gap-1 px-2.5 py-1.5 bg-secondary text-secondary-foreground text-xs font-medium rounded hover:bg-secondary/85 transition disabled:opacity-50 cursor-pointer"
+              >
+                <FileText className="w-3.5 h-3.5 text-primary" />
+                {isPdfDownloading ? "Exporting PDF..." : "Download PDF"}
+              </button>
+              <button
                 onClick={handleDownloadJpg}
                 disabled={totalItems === 0 || isDownloading}
                 className="inline-flex items-center gap-1 px-2.5 py-1.5 bg-secondary text-secondary-foreground text-xs font-medium rounded hover:bg-secondary/85 transition disabled:opacity-50 cursor-pointer"
               >
                 <Download className="w-3.5 h-3.5 text-primary" />
-                {isDownloading ? "Exporting..." : "Download JPG"}
+                {isDownloading ? "Exporting JPG..." : "Download JPG"}
               </button>
               <button
                 onClick={handlePrint}
@@ -796,18 +885,26 @@ export default function EmiCalculator() {
 
             <div className="pt-2 border-t border-gray-300 flex gap-2">
               <button
+                onClick={handleDownloadPdf}
+                disabled={isPdfDownloading}
+                className="flex-1 py-1.5 bg-secondary text-secondary-foreground font-bold rounded hover:bg-secondary/85 cursor-pointer flex items-center justify-center gap-1 text-[11px]"
+              >
+                <FileText className="w-3.5 h-3.5 text-[#153f74]" />
+                {isPdfDownloading ? "PDF..." : "PDF"}
+              </button>
+              <button
                 onClick={handleDownloadJpg}
                 disabled={isDownloading}
-                className="flex-1 py-1.5 bg-secondary text-secondary-foreground font-bold rounded hover:bg-secondary/85 cursor-pointer flex items-center justify-center gap-1"
+                className="flex-1 py-1.5 bg-secondary text-secondary-foreground font-bold rounded hover:bg-secondary/85 cursor-pointer flex items-center justify-center gap-1 text-[11px]"
               >
                 <Download className="w-3.5 h-3.5 text-[#153f74]" />
-                {isDownloading ? "Exporting..." : "Download JPG"}
+                {isDownloading ? "JPG..." : "JPG"}
               </button>
               <button
                 onClick={() => setIsOptionsOpen(false)}
                 className="flex-1 py-1.5 bg-[#153f74] text-white font-bold rounded hover:bg-[#0d2a4e] cursor-pointer"
               >
-                Apply & Close
+                Apply
               </button>
             </div>
           </div>
