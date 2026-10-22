@@ -26,19 +26,23 @@ function isRecoveryFlow() {
   return (
     window.location.hash.includes("type=recovery") ||
     window.location.pathname === "/reset-password" ||
-    window.location.pathname === "/admin-callback"   // ← added
+    window.location.pathname === "/admin-callback"
   );
 }
 
 export function AuthProvider({ children }) {
-  const [user, setUser]               = useState(null);
-  const [loading, setLoading]         = useState(true);
-  const [tfaProfile, setTfaProfile]   = useState(null);
+  const [user, setUser] = useState(null);
+  const [loading, setLoading] = useState(true);
+  const [tfaProfile, setTfaProfile] = useState(null);
   const [tfaRequired, setTfaRequired] = useState(false);
-  const tfaProfileRef                 = useRef(null);
+  const tfaProfileRef = useRef(null);
 
   const loadTfaProfile = async (userId) => {
-    if (!userId) { setTfaProfile(null); tfaProfileRef.current = null; return null; }
+    if (!userId) { 
+      setTfaProfile(null); 
+      tfaProfileRef.current = null; 
+      return null; 
+    }
     try {
       const result = await withTimeout(
         supabase
@@ -52,12 +56,18 @@ export function AuthProvider({ children }) {
       const { data, error } = result;
       if (error) {
         console.warn("loadTfaProfile:", error.message);
-        setTfaProfile(null); tfaProfileRef.current = null; return null;
+        setTfaProfile(null); 
+        tfaProfileRef.current = null; 
+        return null;
       }
-      setTfaProfile(data); tfaProfileRef.current = data; return data;
+      setTfaProfile(data); 
+      tfaProfileRef.current = data; 
+      return data;
     } catch (e) {
       console.warn("loadTfaProfile exception:", e);
-      setTfaProfile(null); tfaProfileRef.current = null; return null;
+      setTfaProfile(null); 
+      tfaProfileRef.current = null; 
+      return null;
     }
   };
 
@@ -72,15 +82,17 @@ export function AuthProvider({ children }) {
       return needed;
     } catch (e) {
       console.warn("checkTfaRequirement:", e);
-      setTfaRequired(false); return false;
+      setTfaRequired(false); 
+      return false;
     }
   };
 
   useEffect(() => {
+    let isMounted = true;
+
     const handleDeepLink = (urlStr) => {
       try {
         const url = new URL(urlStr);
-        // We only care about the path, query, and hash
         const path = url.pathname + url.search + url.hash;
         if (path && path !== "/") {
           window.location.href = path;
@@ -100,27 +112,63 @@ export function AuthProvider({ children }) {
       });
     }
 
-    supabase.auth.getSession().then(async ({ data: { session } }) => {
-      const currentUser = session?.user ?? null;
-      setUser(currentUser);
-      if (currentUser && !isRecoveryFlow()) {
-        await checkTfaRequirement(currentUser.id);
-      }
-      setLoading(false);
-    });
+    // Safely initialize session with timeout fallback and invalid refresh token cleanup
+    async function initAuth() {
+      try {
+        const result = await withTimeout(
+          supabase.auth.getSession(),
+          5000,
+          { data: { session: null }, error: { message: "timeout" } }
+        );
 
-    const { data: { subscription } } = supabase.auth.onAuthStateChange(
-      async (_event, session) => {
+        if (!isMounted) return;
+
+        // If the session has an invalid refresh token or error, clean it up gracefully
+        if (result.error) {
+          console.warn("Session retrieval warning:", result.error.message);
+          await supabase.auth.signOut().catch(() => {});
+          setUser(null);
+          return;
+        }
+
+        const session = result?.data?.session ?? null;
         const currentUser = session?.user ?? null;
         setUser(currentUser);
 
-        if (_event === "PASSWORD_RECOVERY") return;
+        if (currentUser && !isRecoveryFlow()) {
+          await checkTfaRequirement(currentUser.id);
+        }
+      } catch (e) {
+        console.warn("Auth initialization exception:", e);
+        setUser(null);
+      } finally {
+        if (isMounted) {
+          setLoading(false); // Guarantees loading state clears out
+        }
+      }
+    }
 
-        if (_event === "SIGNED_IN" && currentUser) {
-          if (!isRecoveryFlow()) await checkTfaRequirement(currentUser.id);
+    initAuth();
+
+    const { data: { subscription } } = supabase.auth.onAuthStateChange(
+      async (event, session) => {
+        // Prevent unnecessary state thrashing from concurrent background tab refreshes
+        if (event === "TOKEN_REFRESHED") return;
+
+        if (!isMounted) return;
+
+        const currentUser = session?.user ?? null;
+        setUser(currentUser);
+
+        if (event === "PASSWORD_RECOVERY") return;
+
+        if (event === "SIGNED_IN" && currentUser) {
+          if (!isRecoveryFlow()) {
+            await checkTfaRequirement(currentUser.id);
+          }
         }
 
-        if (_event === "SIGNED_OUT") {
+        if (event === "SIGNED_OUT") {
           queryClientInstance.clear();
           setTfaProfile(null);
           setTfaRequired(false);
@@ -128,7 +176,10 @@ export function AuthProvider({ children }) {
       }
     );
 
-    return () => subscription.unsubscribe();
+    return () => {
+      isMounted = false;
+      subscription.unsubscribe();
+    };
   }, []);
 
   const signIn = (email, password) =>
@@ -146,8 +197,12 @@ export function AuthProvider({ children }) {
   };
 
   const signOut = async () => {
-    try { await supabase.auth.signOut(); queryClientInstance.clear(); }
-    catch (e) { console.error("signOut error:", e); }
+    try { 
+      await supabase.auth.signOut(); 
+      queryClientInstance.clear(); 
+    } catch (e) { 
+      console.error("signOut error:", e); 
+    }
   };
 
   const signInWithGoogle = async () => {
@@ -250,11 +305,23 @@ export function AuthProvider({ children }) {
   return (
     <AuthContext.Provider
       value={{
-        user, loading, isLoadingAuth: loading,
-        tfaProfile, tfaRequired, setTfaRequired,
-        signIn, signUp, signOut, signInWithGoogle, verifyOtp,
-        requestPasswordReset, setupTfaPin, verifyTfaPin, disableTfa,
-        checkTfaRequirement, loadTfaProfile,
+        user, 
+        loading, 
+        isLoadingAuth: loading,
+        tfaProfile, 
+        tfaRequired, 
+        setTfaRequired,
+        signIn, 
+        signUp, 
+        signOut, 
+        signInWithGoogle, 
+        verifyOtp,
+        requestPasswordReset, 
+        setupTfaPin, 
+        verifyTfaPin, 
+        disableTfa,
+        checkTfaRequirement, 
+        loadTfaProfile,
       }}
     >
       {children}

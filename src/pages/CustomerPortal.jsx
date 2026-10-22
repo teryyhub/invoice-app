@@ -1,16 +1,11 @@
 // /src/pages/CustomerPortal.jsx
 import React, { useState, useEffect, useMemo, useCallback } from "react";
 import { useNavigate } from "react-router-dom";
-import { createClient } from "@supabase/supabase-js";
+import { supabase } from "@/api/supabaseClient"; // Use shared client singleton
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Search, LogOut, Loader2, ShieldCheck, X, Sun, Moon } from "lucide-react";
 import { format } from "date-fns";
-
-const supabase = createClient(
-  import.meta.env.VITE_SUPABASE_URL,
-  import.meta.env.VITE_SUPABASE_ANON_KEY
-);
 
 function toPortalRow(inv) {
   return {
@@ -115,9 +110,9 @@ export default function CustomerPortal() {
     const q = search.trim().toLowerCase();
     return records.filter(r =>
       r.customerName.toLowerCase().includes(q) ||
-      r.mobile.includes(q)                     ||
+      r.mobile.includes(q)                  ||
       r.applicationId.toLowerCase().includes(q) ||
-      r.asset.toLowerCase().includes(q)         ||
+      r.asset.toLowerCase().includes(q)          ||
       r.imei.toLowerCase().includes(q)          ||
       r.invoiceNo.toLowerCase().includes(q)     ||
       r.vendorName.toLowerCase().includes(q)

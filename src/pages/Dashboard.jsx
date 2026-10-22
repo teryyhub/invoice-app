@@ -1,3 +1,4 @@
+// src/pages/Dashboard.jsx
 import React, { useMemo } from "react";
 import { Link } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
@@ -24,7 +25,7 @@ const formatCurrency = (val = 0) =>
 export default function Dashboard() {
   const { user } = useAuth();
 
-  // Cached query: Prevents refetching 99,999 records on tab switches or route changes
+  // Cached query: Prevents refetching records on tab switches or route changes
   const {
     data: invoices = [],
     isLoading: loadingInvoices,
@@ -175,8 +176,8 @@ export default function Dashboard() {
         </Card>
       </div>
 
-      {/* Recent Ledger List */}
-      {invoices.length > 0 && (
+      {/* Recent Ledger List or Empty State */}
+      {invoices.length > 0 ? (
         <Card className="rounded-lg border-border/80 shadow-none">
           <div className="flex items-center justify-between px-2.5 py-1.5 border-b border-border/60">
             <span className="text-[11px] font-bold tracking-tight text-foreground">
@@ -227,6 +228,20 @@ export default function Dashboard() {
                 );
               })}
             </div>
+          </CardContent>
+        </Card>
+      ) : (
+        <Card className="rounded-xl border-dashed border-border/80 bg-card/50 shadow-none">
+          <CardContent className="p-6 text-center space-y-2">
+            <p className="text-xs font-bold text-foreground">No invoices generated yet</p>
+            <p className="text-[11px] text-muted-foreground max-w-xs mx-auto">
+              Create your first GST or finance invoice to populate your dashboard ledger.
+            </p>
+            <Link to="/generate">
+              <Button size="sm" className="h-7 px-3 text-xs font-semibold rounded-md shadow-none mt-1">
+                Create Invoice
+              </Button>
+            </Link>
           </CardContent>
         </Card>
       )}

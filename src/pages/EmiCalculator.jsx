@@ -1,13 +1,18 @@
+// src/pages/EmiCalculator.jsx
 import React, { useState, useMemo, useRef, useEffect } from "react";
-import { Calculator, Share2, Info, Calendar, Percent, Settings, X, CreditCard, AlertCircle, Printer, Sliders, CheckCircle, ShieldAlert, Download, Palette, FileText } from "lucide-react";
+import { Calculator, Share2, Info, Calendar, Percent, Settings, X, CreditCard, AlertCircle, Printer, Sliders, CheckCircle, ShieldAlert, Download, Palette, FileText, ArrowLeft } from "lucide-react";
+import { useNavigate } from "react-router-dom";
 
 export default function EmiCalculator() {
-  const [emi, setEmi] = useState("");
-  const [tenureMonths, setTenureMonths] = useState("");
-  const [loanNo, setLoanNo] = useState("");
+  const navigate = useNavigate();
+  const [emi, setEmi] = useState(() => localStorage.getItem("chola_calc_emi") || "");
+  const [tenureMonths, setTenureMonths] = useState(() => localStorage.getItem("chola_calc_tenure") || "");
+  const [loanNo, setLoanNo] = useState(() => localStorage.getItem("chola_calc_loanno") || "");
   
   // DO Date defaults to today in YYYY-MM-DD format
   const [doDate, setDoDate] = useState(() => {
+    const saved = localStorage.getItem("chola_calc_dodate");
+    if (saved) return saved;
     const today = new Date();
     const year = today.getFullYear();
     const month = String(today.getMonth() + 1).padStart(2, '0');
@@ -15,18 +20,29 @@ export default function EmiCalculator() {
     return `${year}-${month}-${day}`;
   });
 
-  const [isDeviceInsurance, setIsDeviceInsurance] = useState(false);
-  const [isColorTheme, setIsColorTheme] = useState(true); // Toggle for color vs grey
+  const [isDeviceInsurance, setIsDeviceInsurance] = useState(() => localStorage.getItem("chola_calc_insurance") === "true");
+  const [isColorTheme, setIsColorTheme] = useState(() => localStorage.getItem("chola_calc_colortheme") !== "false");
   const [isGenerated, setIsGenerated] = useState(false);
   const [isOptionsOpen, setIsOptionsOpen] = useState(false);
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
-  const [defaultDay, setDefaultDay] = useState("5");
+  const [defaultDay, setDefaultDay] = useState(() => localStorage.getItem("chola_calc_defaultday") || "5");
   const [isDownloading, setIsDownloading] = useState(false);
   const [isPdfDownloading, setIsPdfDownloading] = useState(false);
   
   const scheduleRef = useRef(null);
   const containerRef = useRef(null);
   const [scale, setScale] = useState(1);
+
+  // Save parameters to localStorage when they change
+  useEffect(() => {
+    localStorage.setItem("chola_calc_emi", emi);
+    localStorage.setItem("chola_calc_tenure", tenureMonths);
+    localStorage.setItem("chola_calc_loanno", loanNo);
+    localStorage.setItem("chola_calc_dodate", doDate);
+    localStorage.setItem("chola_calc_insurance", isDeviceInsurance);
+    localStorage.setItem("chola_calc_colortheme", isColorTheme);
+    localStorage.setItem("chola_calc_defaultday", defaultDay);
+  }, [emi, tenureMonths, loanNo, doDate, isDeviceInsurance, isColorTheme, defaultDay]);
 
   // Automatically calculate First EMI Date based on DO Date rule
   const firstEmiDate = useMemo(() => {
@@ -270,12 +286,13 @@ export default function EmiCalculator() {
           width: 794px !important;
           min-width: 794px !important;
           max-width: 794px !important;
-          height: 1120px !important;
-          max-height: 1120px !important;
-          font-size: 13.5px !important;
+          height: 1070px !important;
+          max-height: 1070px !important;
+          font-size: 13.5px !important; 
           box-sizing: border-box !important;
           background-color: #ffffff !important;
-          border: 1px solid ${isColorTheme ? '#153f74' : '#333333'} !important;
+          padding: 10px 18px !important;
+          border: 2px solid ${isColorTheme ? '#153f74' : '#222222'} !important;
           overflow: hidden !important;
           -webkit-print-color-adjust: exact !important;
           print-color-adjust: exact !important;
@@ -284,8 +301,8 @@ export default function EmiCalculator() {
         .fixed-a4-model .instructions-section p, 
         .fixed-a4-model .instructions-section li, 
         .fixed-a4-model .instructions-section span {
-          font-size: 11px !important;
-          line-height: 1.2 !important;
+          font-size: 10.5px !important;
+          line-height: 1.15 !important;
         }
         .fixed-a4-model .insurance-policy-box,
         .fixed-a4-model .insurance-policy-box p,
@@ -294,8 +311,8 @@ export default function EmiCalculator() {
         .fixed-a4-model .notice-footer .notice-content,
         .fixed-a4-model .notice-footer .notice-content p,
         .fixed-a4-model .notice-footer .notice-content span {
-          font-size: 12.5px !important;
-          line-height: 1.25 !important;
+          font-size: 11.5px !important;
+          line-height: 1.2 !important;
         }
         .fixed-a4-model table {
           font-family: 'Courier New', Courier, monospace !important;
@@ -304,9 +321,9 @@ export default function EmiCalculator() {
           print-color-adjust: exact !important;
         }
         .fixed-a4-model table th {
-          font-size: 13.5px !important;
+          font-size: 13px !important;
           letter-spacing: -0.5px;
-          padding: 2px 6px !important;
+          padding: 2px 4px !important;
           background-color: ${isColorTheme ? '#153f74' : '#ffffff'} !important;
           color: ${isColorTheme ? '#ffffff' : '#000000'} !important;
           border: 1px solid ${isColorTheme ? '#153f74' : '#333333'} !important;
@@ -314,53 +331,90 @@ export default function EmiCalculator() {
           print-color-adjust: exact !important;
         }
         .fixed-a4-model table td {
-          font-size: 13.5px !important;
+          font-size: 13px !important;
           letter-spacing: -0.5px;
-          padding: 2px 6px !important;
+          padding: 2px 4px !important;
           border: 1px solid ${isColorTheme ? '#cccccc' : '#666666'} !important;
           background-color: #ffffff !important;
           -webkit-print-color-adjust: exact !important;
           print-color-adjust: exact !important;
         }
 
-        /* PRINT STYLES: Hide everything except the printable A4 model */
+        /* STRICT SINGLE-PAGE PRINT & PDF LOCK */
         @media print {
-          body * {
-            visibility: hidden !important;
+          @page {
+            size: A4 portrait;
+            margin: 0; 
           }
-          #printable-schedule-wrapper, #printable-schedule-wrapper * {
-            visibility: visible !important;
+          html, body {
+            width: 210mm;
+            height: 297mm;
+            margin: 0 !important;
+            padding: 0 !important;
+            background-color: #ffffff !important;
+            overflow: hidden !important;
+            -webkit-print-color-adjust: exact !important;
+          }
+          header, nav, button, .fixed {
+            display: none !important;
+          }
+          body > div {
+            margin: 0 !important;
+            padding: 0 !important;
+            max-width: none !important;
+          }
+          body > div > div:not(:has(#printable-schedule-wrapper)) {
+            display: none !important;
           }
           #printable-schedule-wrapper {
             position: absolute !important;
             left: 0 !important;
             top: 0 !important;
-            width: 100% !important;
-            height: 100% !important;
+            width: 794px !important;
+            height: 1020px !important;
             margin: 0 !important;
             padding: 0 !important;
+            overflow: hidden !important;
+            page-break-after: avoid !important;
+            page-break-inside: avoid !important;
           }
           .fixed-a4-model {
             transform: none !important;
-            position: relative !important;
+            position: absolute !important;
             left: 0 !important;
             top: 0 !important;
-            border: none !important;
+            width: 794px !important;
+            height: 1020px !important;
+            padding: 6px 18px !important; 
+            border: 2px solid ${isColorTheme ? '#153f74' : '#222222'} !important;
             box-shadow: none !important;
+            page-break-after: avoid !important;
+            page-break-inside: avoid !important;
+            break-after: avoid !important;
+            break-inside: avoid !important;
           }
         }
       `}</style>
 
-      {/* Minimal Header */}
+      {/* Minimal Header with Back Button */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-border pb-3">
-        <div>
-          <h1 className="text-lg font-bold tracking-tight text-foreground flex items-center gap-1.5">
-            <Calculator className="w-4 h-4 text-primary" />
-            Repayment Schedule & Template Generator
-          </h1>
-          <p className="text-xs text-muted-foreground">
-            Single-page A4 layout & bilingual guidelines.
-          </p>
+        <div className="flex items-center gap-2">
+          <button
+            onClick={() => navigate(-1)}
+            className="inline-flex items-center justify-center p-1.5 bg-secondary text-secondary-foreground rounded hover:bg-secondary/85 transition cursor-pointer"
+            title="Go Back"
+          >
+            <ArrowLeft className="w-4 h-4" />
+          </button>
+          <div>
+            <h1 className="text-lg font-bold tracking-tight text-foreground flex items-center gap-1.5">
+              <Calculator className="w-4 h-4 text-primary" />
+              Repayment Schedule Generator
+            </h1>
+            <p className="text-xs text-muted-foreground">
+              -
+            </p>
+          </div>
         </div>
         <div className="flex items-center gap-1.5 flex-wrap">
           <button
@@ -551,7 +605,7 @@ export default function EmiCalculator() {
                 top: 0,
                 left: `calc(50% - 397px)`
               }}
-              className="fixed-a4-model bg-white text-gray-900 border p-2 space-y-1 flex flex-col justify-start"
+              className="fixed-a4-model bg-white text-gray-900 border p-2 space-y-1.5 flex flex-col justify-start"
             >
               <div className="space-y-1">
                 {/* Template Header Card */}
@@ -563,65 +617,65 @@ export default function EmiCalculator() {
                     <img 
                       src={`https://api.qrserver.com/v1/create-qr-code/?size=120x120&data=${encodeURIComponent("https://play.google.com/store/apps/details?id=io.ionic.d2c")}`} 
                       alt="Chola One App QR" 
-                      className="w-[64px] h-[64px] block"
+                      className="w-[60px] h-[60px] block"
                     />
                     <span className={`text-[8.5px] font-extrabold mt-0.5 leading-none ${isColorTheme ? 'text-[#153f74]' : 'text-black'}`}>Chola One</span>
                   </div>
 
-                  <div className={`py-0.5 text-center border-b flex justify-between items-center px-3 pr-24 ${isColorTheme ? 'bg-[#153f74] border-blue-800' : 'bg-white border-black'}`} style={isColorTheme ? { backgroundColor: '#153f74', WebkitPrintColorAdjust: 'exact', printColorAdjust: 'exact' } : {}}>
+                  <div className={`py-1 text-center border-b flex justify-between items-center px-3 pr-24 ${isColorTheme ? 'bg-[#153f74] border-blue-800' : 'bg-white border-black'}`} style={isColorTheme ? { backgroundColor: '#0d3c6c', WebkitPrintColorAdjust: 'exact', printColorAdjust: 'exact' } : {}}>
                     <h2 className={`text-xs font-extrabold uppercase tracking-widest flex items-center gap-2 ${isColorTheme ? 'text-white' : 'text-black'}`}>
-                      <u>Repayment Schedule</u> {loanNo ? <span className={`border px-1.5 py-0.5 rounded text-[10.5px] font-bold ${isColorTheme ? 'bg-blue-900/80 border-blue-900 text-blue-100' : 'border-black text-black'}`}>Loan No: {loanNo}</span> : null}
+                      <u>Repayment Schedule</u> {loanNo ? <span className={`border px-2 py-0.5 rounded text-[13px] font-bold ${isColorTheme ? 'bg-black-900/80 border-black-900 text-black-100' : 'border-black text-black'}`}>Loan No: {loanNo}</span> : null}
                     </h2>
-                    <span className={`text-[9.5px] font-bold border px-1.5 py-0.2 rounded ${isColorTheme ? 'bg-blue-900/60 border-blue-900 text-blue-100' : 'border-black text-black'}`}>
+                    <span className={`text-[10px] font-bold border px-1.5 py-0.2 rounded ${isColorTheme ? 'bg-blue-900/60 border-blue-900 text-blue-100' : 'border-black text-black'}`}>
                       Insurance: {isDeviceInsurance ? <span className="underline">Available (Yes)</span> : "Not Available (No)"}
                     </span>
                   </div>
                   <div className={`grid grid-cols-4 divide-x py-1 px-2 text-center pr-24 ${isColorTheme ? 'bg-[#153f74] divide-blue-800 border-b border-blue-800' : 'bg-white divide-black border-b border-black'}`} style={isColorTheme ? { backgroundColor: '#153f74', WebkitPrintColorAdjust: 'exact', printColorAdjust: 'exact' } : {}}>
                     <div>
-                      <p className={`text-[9.5px] font-bold uppercase tracking-wide ${isColorTheme ? 'text-white' : 'text-black'}`}>Principal Amount</p>
-                      <p className={`text-[11.5px] font-bold mt-0.5 ${isColorTheme ? 'text-white' : 'text-black'}`}>₹ {principal.toLocaleString('en-IN')}</p>
+                      <p className={`text-[10px] font-bold uppercase tracking-wide ${isColorTheme ? 'text-white' : 'text-black'}`}>Principal Amount</p>
+                      <p className={`text-[12px] font-bold mt-0.5 ${isColorTheme ? 'text-white' : 'text-black'}`}>₹ {principal.toLocaleString('en-IN')}</p>
                     </div>
                     <div>
-                      <p className={`text-[9.5px] font-bold uppercase tracking-wide ${isColorTheme ? 'text-white' : 'text-black'}`}>Total EMIs</p>
-                      <p className={`text-[11.5px] font-bold mt-0.5 ${isColorTheme ? 'text-white' : 'text-black'}`}>{tenureMonths}</p>
+                      <p className={`text-[10px] font-bold uppercase tracking-wide ${isColorTheme ? 'text-white' : 'text-black'}`}>Total EMIs</p>
+                      <p className={`text-[12px] font-bold mt-0.5 ${isColorTheme ? 'text-white' : 'text-black'}`}>{tenureMonths}</p>
                     </div>
                     <div>
-                      <p className={`text-[9.5px] font-bold uppercase tracking-wide ${isColorTheme ? 'text-white' : 'text-black'}`}>EMI Amount</p>
-                      <p className={`text-[11.5px] font-bold mt-0.5 ${isColorTheme ? 'text-white' : 'text-black'}`}>₹ {Number(emi || 0).toLocaleString('en-IN')}</p>
+                      <p className={`text-[10px] font-bold uppercase tracking-wide ${isColorTheme ? 'text-white' : 'text-black'}`}>EMI Amount</p>
+                      <p className={`text-[12px] font-bold mt-0.5 ${isColorTheme ? 'text-white' : 'text-black'}`}>₹ {Number(emi || 0).toLocaleString('en-IN')}</p>
                     </div>
                     <div>
-                      <p className={`text-[9.5px] font-bold uppercase tracking-wide ${isColorTheme ? 'text-white' : 'text-black'}`}>Starting Date</p>
-                      <p className={`text-[11.5px] font-bold mt-0.5 ${isColorTheme ? 'text-white' : 'text-black'}`}>{firstEmiDate ? formatDateToDDMMYYYY(firstEmiDate) : "—"}</p>
+                      <p className={`text-[10px] font-bold uppercase tracking-wide ${isColorTheme ? 'text-white' : 'text-black'}`}>Starting Date</p>
+                      <p className={`text-[12px] font-bold mt-0.5 ${isColorTheme ? 'text-white' : 'text-black'}`}>{firstEmiDate ? formatDateToDDMMYYYY(firstEmiDate) : "—"}</p>
                     </div>
                   </div>
                 </div>
 
-                {/* Multi-Column Tables */}
+                {/* Multi-Column Tables (Principal and EMI columns aligned to center) */}
                 <div>
                   {totalItems === 0 ? (
                     <div className="p-6 text-center text-gray-500 font-medium text-xs">
                       Please enter EMI amount and tenure months above to generate the schedule.
                     </div>
                   ) : (
-                    <div className={`grid ${layoutMode === 2 ? 'grid-cols-2' : 'grid-cols-1'} gap-1.5 mx-auto`}>
+                    <div className={`grid ${layoutMode === 2 ? 'grid-cols-2' : 'grid-cols-1'} gap-2 mx-auto`}>
                       {/* Column 1 */}
                       <div className={`border ${isColorTheme ? 'border-[#153f74]' : 'border-black'} bg-white`}>
                         <table className="w-full text-left">
                           <thead>
                             <tr>
-                              <th className={`py-0.5 px-1.5 text-center w-7 border-r font-bold ${isColorTheme ? 'border-blue-900 text-white' : 'border-black text-black'}`} style={isColorTheme ? { backgroundColor: '#153f74', color: '#ffffff' } : {}}>S.No</th>
-                              <th className={`py-0.5 px-1.5 text-center border-r font-bold ${isColorTheme ? 'border-blue-900 text-white' : 'border-black text-black'}`} style={isColorTheme ? { backgroundColor: '#153f74', color: '#ffffff' } : {}}>Due Date</th>
-                              <th className={`py-0.5 px-1.5 text-right border-r font-bold ${isColorTheme ? 'border-blue-900 text-white' : 'border-black text-black'}`} style={isColorTheme ? { backgroundColor: '#153f74', color: '#ffffff' } : {}}>Principal</th>
-                              <th className={`py-0.5 px-1.5 text-right font-bold ${isColorTheme ? 'text-white' : 'text-black'}`} style={isColorTheme ? { backgroundColor: '#153f74', color: '#ffffff' } : {}}>EMI</th>
+                              <th className={`py-1 px-1.5 text-center w-8 border-r font-bold ${isColorTheme ? 'border-blue-900 text-white' : 'border-black text-black'}`} style={isColorTheme ? { backgroundColor: '#153f74', color: '#ffffff' } : {}}>S.No</th>
+                              <th className={`py-1 px-1.5 text-center border-r font-bold ${isColorTheme ? 'border-blue-900 text-white' : 'border-black text-black'}`} style={isColorTheme ? { backgroundColor: '#153f74', color: '#ffffff' } : {}}>Due Date</th>
+                              <th className={`py-1 px-1.5 text-center border-r font-bold ${isColorTheme ? 'border-blue-900 text-white' : 'border-black text-black'}`} style={isColorTheme ? { backgroundColor: '#153f74', color: '#ffffff' } : {}}>Principal</th>
+                              <th className={`py-1 px-1.5 text-center font-bold ${isColorTheme ? 'text-white' : 'text-black'}`} style={isColorTheme ? { backgroundColor: '#153f74', color: '#ffffff' } : {}}>EMI</th>
                             </tr>
                           </thead>
                           <tbody>
                             {col1.map((item, idx) => (
                               <tr key={idx} className="bg-white border-b border-gray-300">
-                                <td className="py-0.5 px-1.5 text-center font-bold text-black border-r border-gray-300">{item.installment}</td>
-                                <td className="py-0.5 px-1.5 text-center font-semibold text-black border-r border-gray-300">{item.dueDate}</td>
-                                <td className="py-0.5 px-1.5 text-right font-bold text-black border-r border-gray-300">₹ {Math.round(item.principal).toLocaleString('en-IN')}</td>
-                                <td className="py-0.5 px-1.5 text-right font-bold text-black">₹ {Math.round(item.amount).toLocaleString('en-IN')}</td>
+                                <td className="py-1 px-1.5 text-center font-bold text-black border-r border-gray-300">{item.installment}</td>
+                                <td className="py-1 px-1.5 text-center font-semibold text-black border-r border-gray-300">{item.dueDate}</td>
+                                <td className="py-1 px-1.5 text-center font-bold text-black border-r border-gray-300">₹ {Math.round(item.principal).toLocaleString('en-IN')}</td>
+                                <td className="py-1 px-1.5 text-center font-bold text-black">₹ {Math.round(item.amount).toLocaleString('en-IN')}</td>
                               </tr>
                             ))}
                           </tbody>
@@ -634,19 +688,19 @@ export default function EmiCalculator() {
                           <table className="w-full text-left">
                             <thead>
                               <tr>
-                                <th className={`py-0.5 px-1.5 text-center w-7 border-r font-bold ${isColorTheme ? 'border-blue-900 text-white' : 'border-black text-black'}`} style={isColorTheme ? { backgroundColor: '#153f74', color: '#ffffff' } : {}}>S.No</th>
-                                <th className={`py-0.5 px-1.5 text-center border-r font-bold ${isColorTheme ? 'border-blue-900 text-white' : 'border-black text-black'}`} style={isColorTheme ? { backgroundColor: '#153f74', color: '#ffffff' } : {}}>Due Date</th>
-                                <th className={`py-0.5 px-1.5 text-right border-r font-bold ${isColorTheme ? 'border-blue-900 text-white' : 'border-black text-black'}`} style={isColorTheme ? { backgroundColor: '#153f74', color: '#ffffff' } : {}}>Principal</th>
-                                <th className={`py-0.5 px-1.5 text-right font-bold ${isColorTheme ? 'text-white' : 'text-black'}`} style={isColorTheme ? { backgroundColor: '#153f74', color: '#ffffff' } : {}}>EMI</th>
+                                <th className={`py-1 px-1.5 text-center w-8 border-r font-bold ${isColorTheme ? 'border-blue-900 text-white' : 'border-black text-black'}`} style={isColorTheme ? { backgroundColor: '#153f74', color: '#ffffff' } : {}}>S.No</th>
+                                <th className={`py-1 px-1.5 text-center border-r font-bold ${isColorTheme ? 'border-blue-900 text-white' : 'border-black text-black'}`} style={isColorTheme ? { backgroundColor: '#153f74', color: '#ffffff' } : {}}>Due Date</th>
+                                <th className={`py-1 px-1.5 text-center border-r font-bold ${isColorTheme ? 'border-blue-900 text-white' : 'border-black text-black'}`} style={isColorTheme ? { backgroundColor: '#153f74', color: '#ffffff' } : {}}>Principal</th>
+                                <th className={`py-1 px-1.5 text-center font-bold ${isColorTheme ? 'text-white' : 'text-black'}`} style={isColorTheme ? { backgroundColor: '#153f74', color: '#ffffff' } : {}}>EMI</th>
                               </tr>
                             </thead>
                             <tbody>
                               {col2.map((item, idx) => (
                                 <tr key={chunkSize + idx} className="bg-white border-b border-gray-300">
-                                  <td className="py-0.5 px-1.5 text-center font-bold text-black border-r border-gray-300">{item.installment}</td>
-                                  <td className="py-0.5 px-1.5 text-center font-semibold text-black border-r border-gray-300">{item.dueDate}</td>
-                                  <td className="py-0.5 px-1.5 text-right font-bold text-black border-r border-gray-300">₹ {Math.round(item.principal).toLocaleString('en-IN')}</td>
-                                  <td className="py-0.5 px-1.5 text-right font-bold text-black">₹ {Math.round(item.amount).toLocaleString('en-IN')}</td>
+                                  <td className="py-1 px-1.5 text-center font-bold text-black border-r border-gray-300">{item.installment}</td>
+                                  <td className="py-1 px-1.5 text-center font-semibold text-black border-r border-gray-300">{item.dueDate}</td>
+                                  <td className="py-1 px-1.5 text-center font-bold text-black border-r border-gray-300">₹ {Math.round(item.principal).toLocaleString('en-IN')}</td>
+                                  <td className="py-1 px-1.5 text-center font-bold text-black">₹ {Math.round(item.amount).toLocaleString('en-IN')}</td>
                                 </tr>
                               ))}
                             </tbody>
@@ -660,7 +714,7 @@ export default function EmiCalculator() {
                 {/* Total Summary Bar */}
                 {totalItems > 0 && (
                   <div 
-                    className={`border py-1 px-3 flex justify-between items-center text-xs font-black ${isColorTheme ? 'bg-[#153f74] text-white border-[#153f74]' : 'bg-white text-black border-black'}`}
+                    className={`border py-1.5 px-3 flex justify-between items-center text-xs font-black ${isColorTheme ? 'bg-[#153f74] text-white border-[#153f74]' : 'bg-white text-black border-black'}`}
                     style={isColorTheme ? { backgroundColor: '#153f74', WebkitPrintColorAdjust: 'exact', printColorAdjust: 'exact' } : {}}
                   >
                     <span><u>Total Payable</u></span>
@@ -672,11 +726,11 @@ export default function EmiCalculator() {
                 )}
 
                 {/* Instructions & Guidelines in Lower Part */}
-                <div className={`instructions-section space-y-0.5 p-1.5 border text-black ${isColorTheme ? 'bg-gray-50 border-gray-300' : 'bg-white border-black'}`} style={isColorTheme ? { backgroundColor: '#f9fafb', WebkitPrintColorAdjust: 'exact', printColorAdjust: 'exact' } : {}}>
+                <div className={`instructions-section space-y-1 p-2 border text-black ${isColorTheme ? 'bg-gray-50 border-gray-300' : 'bg-white border-black'}`} style={isColorTheme ? { backgroundColor: '#f9fafb', WebkitPrintColorAdjust: 'exact', printColorAdjust: 'exact' } : {}}>
                   <p className="font-black uppercase tracking-wider text-black underline">
                     Instructions & Finance Guidelines / <span className="telugu-text font-bold">నిబంధనలు మరియు మార్గదర్శకాలు</span>
                   </p>
-                  <ol className="list-decimal list-outside pl-4 space-y-0.5 font-medium leading-tight">
+                  <ol className="list-decimal list-outside pl-4 space-y-1 font-medium leading-tight">
                     <div>
                       The device given in finance are only for consumer use and <u>only the customer is responsible</u> for loan amount, charges and emi's.<br />
                       <span className="telugu-text text-black font-semibold">ఫైనాన్స్‌లో ఇవ్వబడిన పరికరం కేవలం వినియోగదారుల వినియోగం కోసం మాత్రమే మరియు <u>లోన్ మొత్తం, ఛార్జీలు మరియు ఈఎంఐలకు కస్టమర్ మాత్రమే బాధ్యత వహిస్తారు.</u></span>
@@ -702,13 +756,13 @@ export default function EmiCalculator() {
 
                 {/* Conditional Device Insurance / Uninsured Policy Box */}
                 {isDeviceInsurance ? (
-                  <div className={`insurance-policy-box p-1.5 border flex justify-between items-center gap-2 ${isColorTheme ? 'bg-blue-50 border-blue-300 text-blue-950' : 'bg-white border-black text-black'}`} style={isColorTheme ? { backgroundColor: '#eff6ff', WebkitPrintColorAdjust: 'exact', printColorAdjust: 'exact' } : {}}>
-                    <div className="space-y-0.2 flex-1">
+                  <div className={`insurance-policy-box p-2 border flex justify-between items-center gap-2 ${isColorTheme ? 'bg-blue-50 border-blue-300 text-blue-950' : 'bg-white border-black text-black'}`} style={isColorTheme ? { backgroundColor: '#eff6ff', WebkitPrintColorAdjust: 'exact', printColorAdjust: 'exact' } : {}}>
+                    <div className="space-y-0.5 flex-1">
                       <p className={`font-black uppercase tracking-wider underline flex items-center gap-1 ${isColorTheme ? 'text-blue-950' : 'text-black'}`}>
-                        <ShieldAlert className="w-3 h-3 shrink-0" />
+                        <ShieldAlert className="w-3.5 h-3.5 shrink-0" />
                         Device Insurance Policy (ACKO Mobile Insurance) <span className="telugu-text font-bold">మొబైల్ ఇన్సూరెన్స్ సమాచారం</span>
                       </p>
-                      <ul className="list-disc list-outside pl-4 space-y-0.2 font-medium leading-tight">
+                      <ul className="list-disc list-outside pl-4 space-y-0.5 font-medium leading-tight">
                         <li>
                           This device is secured by ACKO mobile insurance, which can be claimed for accidental damage and liquid damage.<br />
                           <span className="telugu-text font-semibold">ఈ పరికరం ACKO మొబైల్ ఇన్సూరెన్స్ ద్వారా రక్షించబడింది, దీనిని యాక్సిడెంటల్ డ్యామేజ్ మరియు లిక్విడ్ డ్యామేజ్ కోసం క్లెయిమ్ చేయవచ్చు.</span>
@@ -732,15 +786,15 @@ export default function EmiCalculator() {
                       <img 
                         src={`https://api.qrserver.com/v1/create-qr-code/?size=120x120&data=${encodeURIComponent("https://play.google.com/store/apps/details?id=com.acko.android")}`} 
                         alt="ACKO App QR" 
-                        className="w-[64px] h-[64px] block"
+                        className="w-[60px] h-[60px] block"
                       />
                       <span className="text-[8.5px] font-extrabold text-black mt-0.5 leading-none">ACKO App</span>
                     </div>
                   </div>
                 ) : (
-                  <div className={`insurance-policy-box p-1.5 border flex items-start gap-1 ${isColorTheme ? 'bg-red-50 border-red-300 text-red-950' : 'bg-white border-black text-black'}`} style={isColorTheme ? { backgroundColor: '#fef2f2', WebkitPrintColorAdjust: 'exact', printColorAdjust: 'exact' } : {}}>
-                    <ShieldAlert className="w-3 h-3 shrink-0 mt-0.5" />
-                    <div className="space-y-0.1">
+                  <div className={`insurance-policy-box p-2 border flex items-start gap-1.5 ${isColorTheme ? 'bg-red-50 border-red-300 text-red-950' : 'bg-white border-black text-black'}`} style={isColorTheme ? { backgroundColor: '#fef2f2', WebkitPrintColorAdjust: 'exact', printColorAdjust: 'exact' } : {}}>
+                    <ShieldAlert className="w-3.5 h-3.5 shrink-0 mt-0.5" />
+                    <div className="space-y-0.5">
                       <p className="font-bold uppercase tracking-wider underline">
                         Insurance Status: Not Insured / <span className="telugu-text font-bold">బీమా స్థితి: బీమా లేదు</span>
                       </p>
@@ -754,11 +808,11 @@ export default function EmiCalculator() {
               </div>
 
               {/* Notice Footer Only */}
-              <div className="notice-footer space-y-0.5 pt-0.5 border-t border-black">
+              <div className="notice-footer space-y-1 pt-1 border-t border-black">
                 {totalItems > 0 && (
-                  <div className={`notice-content p-1 border flex items-start gap-1 ${isColorTheme ? 'bg-amber-50 border-amber-300 text-amber-950' : 'bg-white border-black text-black'}`} style={isColorTheme ? { backgroundColor: '#fffbeb', WebkitPrintColorAdjust: 'exact', printColorAdjust: 'exact' } : {}}>
-                    <AlertCircle className="h-3.5 w-3.5 shrink-0 mt-0.5" />
-                    <div className="space-y-0.1">
+                  <div className={`notice-content p-1.5 border flex items-start gap-1.5 ${isColorTheme ? 'bg-amber-50 border-amber-300 text-amber-950' : 'bg-white border-black text-black'}`} style={isColorTheme ? { backgroundColor: '#fffbeb', WebkitPrintColorAdjust: 'exact', printColorAdjust: 'exact' } : {}}>
+                    <AlertCircle className="h-4 w-4 shrink-0 mt-0.5" />
+                    <div className="space-y-0.5">
                       <p>
                         <strong><u>Important Notice:</u></strong> Ensure funds are deposited before the <strong>4th of every month</strong> to prevent automatic device locking and <u>Rs. 649/-</u> unlock penalty charges.
                       </p>

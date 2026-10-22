@@ -1,3 +1,4 @@
+// src/pages/Help.jsx
 import React, { useState } from 'react';
 import { Input } from '@/components/ui/input';
 import { Card, CardContent } from '@/components/ui/card';
@@ -40,59 +41,61 @@ export default function Help() {
   })).filter(cat => cat.items.length > 0);
 
   return (
-    <div className="space-y-8 max-w-4xl mx-auto">
-      <div className="text-center space-y-2">
-        <h1 className="text-3xl font-bold">Help & Support</h1>
-        <p className="text-muted-foreground">Find answers to your questions or contact our support team</p>
+    <div className="space-y-4 max-w-4xl mx-auto pb-8">
+      <div className="text-center space-y-1">
+        <h1 className="text-base font-bold text-foreground">Help & Support</h1>
+        <p className="text-[10px] text-muted-foreground">Find answers to your questions or contact our support team</p>
       </div>
 
-      <div className="relative max-w-md mx-auto">
-        <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+      <div className="relative max-w-sm mx-auto">
+        <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-muted-foreground" />
         <Input 
           placeholder="Search for a question..." 
-          className="pl-9" 
+          className="pl-8 h-7 text-xs bg-card" 
           value={search} 
           onChange={e => setSearch(e.target.value)} 
         />
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-        <Card className="hover:border-primary/50 transition-colors cursor-pointer">
-          <CardContent className="p-6 flex flex-col items-center text-center space-y-3">
-            <div className="p-3 bg-primary/10 rounded-full text-primary"><BookOpen className="w-6 h-6" /></div>
-            <h3 className="font-semibold">User Guide</h3>
-            <p className="text-xs text-muted-foreground">Step-by-step tutorials on using the platform</p>
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-2">
+        <Card className="hover:border-primary/50 transition-colors cursor-pointer rounded-lg border-border/80 shadow-none bg-card">
+          <CardContent className="p-3.5 flex flex-col items-center text-center space-y-1.5">
+            <div className="p-2 bg-primary/10 rounded-full text-primary"><BookOpen className="w-4 h-4" /></div>
+            <h3 className="font-semibold text-xs text-foreground">User Guide</h3>
+            <p className="text-[10px] text-muted-foreground">Step-by-step tutorials on using the platform</p>
           </CardContent>
         </Card>
-        <Card className="hover:border-primary/50 transition-colors cursor-pointer">
-          <CardContent className="p-6 flex flex-col items-center text-center space-y-3">
-            <div className="p-3 bg-primary/10 rounded-full text-primary"><MessageCircle className="w-6 h-6" /></div>
-            <h3 className="font-semibold">Live Chat</h3>
-            <p className="text-xs text-muted-foreground">Connect with a support agent in real-time</p>
+        <Card className="hover:border-primary/50 transition-colors cursor-pointer rounded-lg border-border/80 shadow-none bg-card">
+          <CardContent className="p-3.5 flex flex-col items-center text-center space-y-1.5">
+            <div className="p-2 bg-primary/10 rounded-full text-primary"><MessageCircle className="w-4 h-4" /></div>
+            <h3 className="font-semibold text-xs text-foreground">Live Chat</h3>
+            <p className="text-[10px] text-muted-foreground">Connect with a support agent in real-time</p>
           </CardContent>
         </Card>
-        <Card className="hover:border-primary/50 transition-colors cursor-pointer">
-          <CardContent className="p-6 flex flex-col items-center text-center space-y-3">
-            <div className="p-3 bg-primary/10 rounded-full text-primary"><LifeBuoy className="w-6 h-6" /></div>
-            <h3 className="font-semibold">Ticket Support</h3>
-            <p className="text-xs text-muted-foreground">Submit a request for technical issues</p>
+        <Card className="hover:border-primary/50 transition-colors cursor-pointer rounded-lg border-border/80 shadow-none bg-card">
+          <CardContent className="p-3.5 flex flex-col items-center text-center space-y-1.5">
+            <div className="p-2 bg-primary/10 rounded-full text-primary"><LifeBuoy className="w-4 h-4" /></div>
+            <h3 className="font-semibold text-xs text-foreground">Ticket Support</h3>
+            <p className="text-[10px] text-muted-foreground">Submit a request for technical issues</p>
           </CardContent>
         </Card>
       </div>
 
-      <div className="space-y-6">
-        <h2 className="text-xl font-bold flex items-center gap-2"><ArrowRight className="w-5 h-5 text-primary" /> Frequently Asked Questions</h2>
+      <div className="space-y-3 pt-2">
+        <h2 className="text-xs font-bold uppercase tracking-wider text-muted-foreground flex items-center gap-1.5">
+          <ArrowRight className="w-3.5 h-3.5 text-primary" /> Frequently Asked Questions
+        </h2>
         {filteredFaqs.length === 0 ? (
-          <div className="text-center py-10 text-muted-foreground">No matching FAQs found.</div>
+          <div className="text-center py-8 text-muted-foreground text-xs">No matching FAQs found.</div>
         ) : (
           filteredFaqs.map((cat, idx) => (
-            <div key={idx} className="space-y-3">
-              <h3 className="text-sm font-semibold text-muted-foreground uppercase tracking-wider">{cat.category}</h3>
-              <Accordion type="single-collapse" collapsible className="w-full">
+            <div key={idx} className="space-y-1.5">
+              <h3 className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider">{cat.category}</h3>
+              <Accordion type="single" collapsible className="w-full space-y-1">
                 {cat.items.map((item, i) => (
-                  <AccordionItem key={i} value={`item-${idx}-${i}`} className="border-border">
-                    <AccordionTrigger className="text-left font-medium">{item.q}</Tigger>
-                    <AccordionContent className="text-muted-foreground leading-relaxed">
+                  <AccordionItem key={i} value={`item-${idx}-${i}`} className="border border-border/80 rounded-lg px-3 bg-card shadow-none">
+                    <AccordionTrigger className="text-left font-semibold text-xs py-2 hover:no-underline">{item.q}</AccordionTrigger>
+                    <AccordionContent className="text-xs text-muted-foreground leading-relaxed pb-2">
                       {item.a}
                     </AccordionContent>
                   </AccordionItem>

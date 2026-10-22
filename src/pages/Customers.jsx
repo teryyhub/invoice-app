@@ -1,3 +1,4 @@
+// src/pages/Customers.jsx
 import React, { useState, useMemo } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { Invoice } from '@/api/invoices';
@@ -213,6 +214,7 @@ export default function Customers() {
     const reset = { ...EMPTY_DRAFT };
     setDraft(reset);
     setApplied(reset);
+    setSearch('');
     setPage(1);
   };
 
@@ -509,8 +511,11 @@ export default function Customers() {
               <tbody className="divide-y divide-border/60">
                 {paginatedList.length === 0 ? (
                   <tr>
-                    <td colSpan={6} className="text-center py-6 text-muted-foreground text-xs">
-                      No matching customers.
+                    <td colSpan={6} className="text-center py-8 text-muted-foreground text-xs space-y-2">
+                      <p>No matching customers found.</p>
+                      <button onClick={clearFilters} className="text-primary underline text-[11px] font-medium">
+                        Reset search and filters
+                      </button>
                     </td>
                   </tr>
                 ) : (
@@ -552,7 +557,12 @@ export default function Customers() {
           {/* Mobile Card View */}
           <div className="grid grid-cols-1 gap-1.5 md:hidden">
             {paginatedList.length === 0 ? (
-              <p className="text-center py-6 text-muted-foreground text-xs">No matching customers.</p>
+              <div className="text-center py-8 text-muted-foreground text-xs space-y-2 bg-card rounded-lg border border-border">
+                <p>No matching customers found.</p>
+                <button onClick={clearFilters} className="text-primary underline text-[11px] font-medium">
+                  Reset search and filters
+                </button>
+              </div>
             ) : (
               paginatedList.map((c) => {
                 const dateObj = c.lastDate ? new Date(c.lastDate) : null;

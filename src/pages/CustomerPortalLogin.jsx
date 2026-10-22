@@ -20,7 +20,6 @@ export default function CustomerPortalLogin() {
   const [showPwd, setShowPwd] = useState(false);
   const [loading, setLoading] = useState(false);
 
-  // If already authenticated as merchant/admin, return to dashboard; otherwise return to main login
   const handleBack = () => {
     if (authUser?.id) {
       navigate("/", { replace: true });
@@ -31,18 +30,26 @@ export default function CustomerPortalLogin() {
 
   const handleLogin = async (e) => {
     e.preventDefault();
-    if (!loginId.trim() || !password.trim()) {
+    const trimmedId = loginId.trim();
+    const trimmedPassword = password.trim();
+
+    if (!trimmedId || !trimmedPassword) {
       toast.error("Enter your Login ID and Password");
       return;
     }
+
     setLoading(true);
     try {
-      const user = await CustomerPortalUser.login(loginId.trim(), password.trim());
+      const user = await CustomerPortalUser.login(trimmedId, trimmedPassword);
       if (!user) {
         toast.error("Invalid credentials or account not active");
         return;
       }
-      sessionStorage.setItem("portal_user", JSON.stringify(user));
+      
+      // Sanitize user object to exclude sensitive properties if any exist
+      const { password: _, pin_hash: __, ...safeUser } = user;
+
+      sessionStorage.setItem("portal_user", JSON.stringify(safeUser));
       navigate("/portal/dashboard");
     } catch (err) {
       toast.error("Login failed: " + err.message);

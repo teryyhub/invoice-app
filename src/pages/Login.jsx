@@ -19,6 +19,17 @@ export default function Login() {
   const [loading, setLoading] = useState(false);
   const [message, setMessage] = useState("");
 
+  const handleGoogleLogin = async () => {
+    try {
+      // If running inside Capacitor APK, specify native deep-link redirect
+      const isCapacitor = window.location.protocol === "capacitor:";
+      const redirectTo = isCapacitor ? "com.sivcholainv.app://auth-callback" : undefined;
+      await signInWithGoogle(redirectTo);
+    } catch (err) {
+      setError(err.message || "Google sign-in failed.");
+    }
+  };
+
   async function handleSubmit(e) {
     e.preventDefault();
     setError("");
@@ -186,7 +197,7 @@ export default function Login() {
             <Button
               type="button"
               variant="outline"
-              onClick={() => signInWithGoogle()}
+              onClick={handleGoogleLogin}
               className="w-full h-8 px-2.5 text-xs gap-1.5 font-medium rounded-lg shadow-none"
             >
               <Chrome className="w-3.5 h-3.5" />

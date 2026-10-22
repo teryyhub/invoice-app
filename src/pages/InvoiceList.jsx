@@ -1,4 +1,5 @@
-import React, { useState, useMemo } from "react";
+// src/pages/InvoiceList.jsx
+import React, { useState, useMemo, useEffect } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Invoice } from "@/api/invoices";
 import { VendorProfile } from "@/api/vendorProfiles";
@@ -19,6 +20,7 @@ import {
   RotateCw,
   Database,
   Smartphone,
+  AlertCircle,
 } from "lucide-react";
 import { format, isValid } from "date-fns";
 import { toast } from "sonner";
@@ -41,6 +43,7 @@ export default function InvoiceList() {
   const queryClient = useQueryClient();
 
   const [hasLoaded, setHasLoaded] = useState(false);
+  const [loadTimedOut, setLoadTimedOut] = useState(false);
   const [currentPage, setCurrentPage] = useState(1);
   const [pageSize, setPageSize] = useState(20);
 
@@ -80,7 +83,21 @@ export default function InvoiceList() {
   const isLoadingData = hasLoaded && (loadingInvoices || loadingVendors);
   const isRefreshing = (fetchingInvoices || fetchingVendors) && !isLoadingData;
 
+  // Safety Timeout: Prevents permanent freeze if network/API hangs
+  useEffect(() => {
+    let timer;
+    if (isLoadingData) {
+      timer = setTimeout(() => {
+        setLoadTimedOut(true);
+      }, 8000); // 8-second safety threshold
+    } else {
+      setLoadTimedOut(false);
+    }
+    return () => clearTimeout(timer);
+  }, [isLoadingData]);
+
   const handleInitialLoad = () => {
+    setLoadTimedOut(false);
     setHasLoaded(true);
   };
 
@@ -319,9 +336,34 @@ export default function InvoiceList() {
           </CardContent>
         </Card>
       ) : isLoadingData ? (
-        <div className="flex flex-col items-center justify-center py-12 space-y-1.5">
-          <div className="w-5 h-5 border-2 border-primary/20 border-t-primary rounded-full animate-spin" />
-          <p className="text-[10px] text-muted-foreground">Loading bills...</p>
+        <div className="flex flex-col items-center justify-center py-12 space-y-2">
+          {loadTimedOut ? (
+            <div className="text-center space-y-2 bg-destructive/10 border border-destructive/20 p-4 rounded-lg max-w-sm">
+              <div className="flex items-center justify-center gap-1.5 text-destructive font-semibold text-xs">
+                <AlertCircle className="w-4 h-4 shrink-0" />
+                <span>Loading took longer than expected.</span>
+              </div>
+              <p className="text-[10px] text-muted-foreground">
+                The network or database query timed out. Click below to reset and try again.
+              </p>
+              <Button
+                size="sm"
+                variant="outline"
+                onClick={() => {
+                  setHasLoaded(false);
+                  setLoadTimedOut(false);
+                }}
+                className="h-7 text-xs border-destructive text-destructive hover:bg-destructive hover:text-white"
+              >
+                Reset & Try Again
+              </Button>
+            </div>
+          ) : (
+            <>
+              <div className="w-5 h-5 border-2 border-primary/20 border-t-primary rounded-full animate-spin" />
+              <p className="text-[10px] text-muted-foreground">Loading bills...</p>
+            </>
+          )}
         </div>
       ) : (
         <>

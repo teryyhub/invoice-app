@@ -6,17 +6,21 @@ import { Loader2, ShieldCheck } from "lucide-react";
 
 export default function AuthAdminCallback() {
   const navigate = useNavigate();
-  const [status, setStatus]     = useState("verifying");
+  const [status, setStatus] = useState("verifying");
   const [userEmail, setUserEmail] = useState(null);
 
   useEffect(() => {
+    let isMounted = true;
     let redirected = false;
 
     function doRedirect(session) {
-      if (redirected) return;
+      if (!isMounted || redirected) return;
       redirected = true;
       setUserEmail(session.user.email);
-      setTimeout(() => navigate("/", { replace: true }), 800);
+      setStatus("success");
+      setTimeout(() => {
+        if (isMounted) navigate("/", { replace: true });
+      }, 800);
     }
 
     // Supabase auto-processes the #access_token hash and fires SIGNED_IN
@@ -34,13 +38,14 @@ export default function AuthAdminCallback() {
     });
 
     const timeout = setTimeout(() => {
-      if (!redirected) {
+      if (isMounted && !redirected) {
         console.log("[AdminCallback] timeout — no session");
         setStatus("error");
       }
     }, 10000);
 
     return () => {
+      isMounted = false;
       subscription.unsubscribe();
       clearTimeout(timeout);
     };

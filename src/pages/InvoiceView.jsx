@@ -15,11 +15,15 @@ import {
   Maximize2,
   Stamp,
   Loader2,
+  AlertCircle,
+  Share2,
 } from "lucide-react";
 import InvoiceTemplate from "@/components/invoice/InvoiceTemplate";
 import html2canvas from "html2canvas";
 import jspdf from "jspdf";
 import { toast } from "sonner";
+import { Filesystem, Directory } from "@capacitor/filesystem";
+import { Share } from "@capacitor/share";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -44,6 +48,7 @@ export default function InvoiceView() {
   const [stampScale, setStampScale] = useState(1);
   const [zoom, setZoom] = useState(1);
   const [isCapturing, setIsCapturing] = useState(false);
+  const [loadTimedOut, setLoadTimedOut] = useState(false);
 
   // Exact width measurement function
   const handleAutoFit = useCallback(() => {
@@ -77,7 +82,11 @@ export default function InvoiceView() {
     return () => window.removeEventListener("resize", handleAutoFit);
   }, [handleAutoFit]);
 
-  const { data: invoice, isLoading: loadingInvoice } = useQuery({
+  const {
+    data: invoice,
+    isLoading: loadingInvoice,
+    refetch: refetchInvoice,
+  } = useQuery({
     queryKey: ["invoice", invoiceId],
     queryFn: async () => {
       const list = await Invoice.filter({ id: invoiceId });
@@ -88,7 +97,11 @@ export default function InvoiceView() {
     refetchOnWindowFocus: false,
   });
 
-  const { data: vendorFromDB, isLoading: loadingVendor } = useQuery({
+  const {
+    data: vendorFromDB,
+    isLoading: loadingVendor,
+    refetch: refetchVendor,
+  } = useQuery({
     queryKey: ["vendor", invoice?.vendor_id],
     queryFn: async () => {
       if (!invoice?.vendor_id) {
@@ -102,6 +115,21 @@ export default function InvoiceView() {
     staleTime: 15 * 60 * 1000,
     refetchOnWindowFocus: false,
   });
+
+  const isLoadingData = loadingInvoice || loadingVendor;
+
+  // Safety Timeout: Prevents permanent freeze if network/API hangs
+  useEffect(() => {
+    let timer;
+    if (isLoadingData) {
+      timer = setTimeout(() => {
+        setLoadTimedOut(true);
+      }, 8000);
+    } else {
+      setLoadTimedOut(false);
+    }
+    return () => clearTimeout(timer);
+  }, [isLoadingData]);
 
   useEffect(() => {
     if (!loadingInvoice && !loadingVendor && invoice) {
@@ -126,8 +154,6 @@ export default function InvoiceView() {
     gstin: invoice?.vendor_gstin || vendorFromDB?.gstin || "",
     stamp_url: invoice?.vendor_stamp_url || vendorFromDB?.stamp_url || "",
   };
-
-  const handlePrint = () => window.print();
 
   const captureFullInvoice = async (options = {}) => {
     const el = invoiceRef.current;
@@ -169,7 +195,28 @@ export default function InvoiceView() {
       const pdfWidth = pdf.internal.pageSize.getWidth();
       const pdfHeight = (canvas.height * pdfWidth) / canvas.width;
       pdf.addImage(imgData, "PNG", 0, 0, pdfWidth, pdfHeight);
-      pdf.save(`${invoice?.invoice_number || "invoice"}.pdf`);
+
+      const fileName = `${invoice?.invoice_number || "invoice"}.pdf`;
+
+      if (window.location.protocol === "capacitor:") {
+        const pdfBase64 = pdf.output("datauristring").split(",")[1];
+        const savedFile = await Filesystem.writeFile({
+          path: fileName,
+          data: pdfBase64,
+          directory: Directory.Documents,
+        });
+        await Share.share({
+          title: "Invoice PDF",
+          url: savedFile.uri,
+          dialogTitle: "Save or Share Invoice",
+        });
+        toast.success("PDF saved & ready to share!");
+      } else {
+        pdf.save(fileName);
+        toast.success("PDF downloaded");
+      }
+    } catch (err) {
+      toast.error("Failed to save PDF: " + err.message);
     } finally {
       setIsCapturing(false);
     }
@@ -181,10 +228,60 @@ export default function InvoiceView() {
     try {
       const canvas = await captureFullInvoice({ backgroundColor: "#ffffff" });
       if (!canvas) return;
-      const link = document.createElement("a");
-      link.download = `${invoice?.invoice_number || "invoice"}.jpg`;
-      link.href = canvas.toDataURL("image/jpeg", 0.95);
-      link.click();
+      const fileName = `${invoice?.invoice_number || "invoice"}.jpg`;
+      const base64Data = canvas.toDataURL("image/jpeg", 0.95).split(",")[1];
+
+      if (window.location.protocol === "capacitor:") {
+        const savedFile = await Filesystem.writeFile({
+          path: fileName,
+          data: base64Data,
+          directory: Directory.Documents,
+        });
+        await Share.share({
+          title: "Invoice JPG",
+          url: savedFile.uri,
+          dialogTitle: "Save or Share Invoice",
+        });
+        toast.success("JPG saved & ready to share!");
+      } else {
+        const link = document.createElement("a");
+        link.download = fileName;
+        link.href = `data:image/jpeg;base64,${base64Data}`;
+        link.click();
+        toast.success("JPG downloaded");
+      }
+    } catch (err) {
+      toast.error("Failed to save JPG: " + err.message);
+    } finally {
+      setIsCapturing(false);
+    }
+  };
+
+  const handleNativeShare = async () => {
+    if (!invoiceRef.current) return;
+    setIsCapturing(true);
+    try {
+      const canvas = await captureFullInvoice({ backgroundColor: "#ffffff" });
+      if (!canvas) return;
+      const base64Data = canvas.toDataURL("image/jpeg", 0.95).split(",")[1];
+      const fileName = `Invoice_${invoice?.invoice_number || "share"}.jpg`;
+
+      if (window.location.protocol === "capacitor:") {
+        const savedFile = await Filesystem.writeFile({
+          path: fileName,
+          data: base64Data,
+          directory: Directory.Cache,
+        });
+        await Share.share({
+          title: `Invoice ${invoice?.invoice_number || ""}`,
+          url: savedFile.uri,
+          dialogTitle: "Share Invoice",
+        });
+      } else {
+        window.print();
+      }
+    } catch (err) {
+      toast.error("Sharing failed: " + err.message);
     } finally {
       setIsCapturing(false);
     }
@@ -203,10 +300,44 @@ export default function InvoiceView() {
   const changeZoom = (delta) =>
     setZoom((z) => parseFloat(Math.min(2, Math.max(0.2, z + delta)).toFixed(2)));
 
-  if (loadingInvoice || loadingVendor) {
+  if (isLoadingData) {
     return (
-      <div className="flex items-center justify-center py-12">
-        <div className="w-5 h-5 border-2 border-primary/20 border-t-primary rounded-full animate-spin" />
+      <div className="flex flex-col items-center justify-center py-16 space-y-3">
+        {loadTimedOut ? (
+          <div className="text-center space-y-2.5 bg-destructive/10 border border-destructive/20 p-4 rounded-lg max-w-sm">
+            <div className="flex items-center justify-center gap-1.5 text-destructive font-semibold text-xs">
+              <AlertCircle className="w-4 h-4 shrink-0" />
+              <span>Loading took longer than expected.</span>
+            </div>
+            <p className="text-[10px] text-muted-foreground">
+              The database query or network timed out. Click below to retry or return to the ledger.
+            </p>
+            <div className="flex items-center justify-center gap-2 pt-1">
+              <Button
+                size="sm"
+                variant="outline"
+                onClick={() => {
+                  setLoadTimedOut(false);
+                  refetchInvoice();
+                  refetchVendor();
+                }}
+                className="h-7 text-xs border-destructive text-destructive hover:bg-destructive hover:text-white"
+              >
+                Retry
+              </Button>
+              <Link to="/invoices">
+                <Button size="sm" variant="secondary" className="h-7 text-xs">
+                  Back to Invoices
+                </Button>
+              </Link>
+            </div>
+          </div>
+        ) : (
+          <>
+            <Loader2 className="w-5 h-5 animate-spin text-primary" />
+            <p className="text-xs text-muted-foreground">Loading invoice details...</p>
+          </>
+        )}
       </div>
     );
   }
@@ -330,11 +461,12 @@ export default function InvoiceView() {
 
           <Button
             size="sm"
-            onClick={handlePrint}
+            onClick={handleNativeShare}
+            disabled={isCapturing}
             className="h-8 px-3 text-xs gap-1.5 font-semibold rounded-lg shadow-none"
           >
-            <Printer className="w-3.5 h-3.5 stroke-[2.2]" />
-            <span>Print</span>
+            {isCapturing ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Share2 className="w-3.5 h-3.5 stroke-[2.2]" />}
+            <span>Share</span>
           </Button>
 
           {/* Delete Dialog */}

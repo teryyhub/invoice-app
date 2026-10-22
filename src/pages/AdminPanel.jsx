@@ -1,12 +1,12 @@
 // src/pages/AdminPanel.jsx
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { useNavigate } from "react-router-dom";
 import { useAuth } from "@/lib/AuthContext";
 import { supabase } from "@/api/supabaseClient";
 import {
   Users, ShieldCheck, ShieldOff, ArrowLeft, ChevronRight,
-  Search, LogOut, Calendar, Receipt, Store, X, Loader2, LogIn, Copy, Check,
+  Search, LogOut, Calendar, Receipt, Store, X, Loader2, LogIn as LoginIcon, Copy, Check,
 } from "lucide-react";
 
 function fmt(dateStr) {
@@ -115,7 +115,7 @@ function LoginAsButton({ userId, email }) {
           disabled={loading}
           className="flex items-center gap-1 px-2 py-1 rounded bg-primary/10 hover:bg-primary/20 text-primary text-[10px] font-semibold disabled:opacity-50"
         >
-          {loading ? <Loader2 className="w-3 h-3 animate-spin" /> : <LogIn className="w-3 h-3" />}
+          {loading ? <Loader2 className="w-3 h-3 animate-spin" /> : <LoginIcon className="w-3 h-3" />}
           {loading ? "..." : link ? "Regen" : "Impersonate"}
         </button>
       </div>
@@ -132,6 +132,15 @@ function LoginAsButton({ userId, email }) {
 // ── User detail drawer ─────────────────────────────────────────────────────
 
 function UserDrawer({ userId, email, onClose }) {
+  // Close drawer on pressing Escape key
+  useEffect(() => {
+    function handleKeyDown(e) {
+      if (e.key === "Escape") onClose();
+    }
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [onClose]);
+
   const { data, isLoading, error } = useQuery({
     queryKey: ["admin-user-data", userId],
     queryFn: async () => {
@@ -150,7 +159,8 @@ function UserDrawer({ userId, email, onClose }) {
 
   return (
     <div className="fixed inset-0 z-50 flex">
-      <div className="flex-1 bg-black/60 backdrop-blur-xs" onClick={onClose} />
+      {/* Fixed blur utility class name from backdrop-blur-xs to backdrop-blur-sm */}
+      <div className="flex-1 bg-black/60 backdrop-blur-sm" onClick={onClose} />
       <div className="w-full max-w-md bg-card border-l border-border h-full overflow-y-auto flex flex-col shadow-xl">
         <div className="sticky top-0 bg-card border-b border-border/80 px-3.5 py-2.5 flex items-center justify-between z-10">
           <div className="flex items-center gap-2 min-w-0">
