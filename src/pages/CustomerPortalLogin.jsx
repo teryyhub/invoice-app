@@ -1,8 +1,9 @@
 // /src/pages/CustomerPortalLogin.jsx
 // Standalone login page for the customer read-only portal.
-// Route: /portal  (unauthenticated)
+// Route: /portal
+// Signed-in app users skip this form and go straight to /portal/dashboard.
 
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { useAuth } from "@/lib/AuthContext";
 import { CustomerPortalUser } from "@/api/customerPortalUsers";
@@ -13,16 +14,28 @@ import { toast } from "sonner";
 
 export default function CustomerPortalLogin() {
   const navigate = useNavigate();
-  const { user: authUser } = useAuth();
+  const { user: authUser, isLoadingAuth } = useAuth();
 
   const [loginId, setLoginId] = useState("");
   const [password, setPassword] = useState("");
   const [showPwd, setShowPwd] = useState(false);
   const [loading, setLoading] = useState(false);
 
+  // Already signed in to the app, or a portal session exists -> skip the form
+  useEffect(() => {
+    if (isLoadingAuth) return;
+    let hasPortalSession = false;
+    try {
+      hasPortalSession = !!sessionStorage.getItem("portal_user");
+    } catch {}
+    if (authUser || hasPortalSession) {
+      navigate("/portal/dashboard", { replace: true });
+    }
+  }, [authUser, isLoadingAuth, navigate]);
+
   const handleBack = () => {
     if (authUser?.id) {
-      navigate("/", { replace: true });
+      navigate("/dashboard", { replace: true });
     } else {
       navigate("/login", { replace: true });
     }
@@ -45,12 +58,12 @@ export default function CustomerPortalLogin() {
         toast.error("Invalid credentials or account not active");
         return;
       }
-      
-      // Sanitize user object to exclude sensitive properties if any exist
+
+      // Remove sensitive properties before storing
       const { password: _, pin_hash: __, ...safeUser } = user;
 
       sessionStorage.setItem("portal_user", JSON.stringify(safeUser));
-      navigate("/portal/dashboard");
+      navigate("/portal/dashboard", { replace: true });
     } catch (err) {
       toast.error("Login failed: " + err.message);
     } finally {
@@ -58,9 +71,18 @@ export default function CustomerPortalLogin() {
     }
   };
 
+  // Avoid flashing the form while the session is being checked
+  if (isLoadingAuth) {
+    return (
+      <div className="min-h-screen bg-background flex items-center justify-center">
+        <Loader2 className="w-5 h-5 animate-spin text-primary" />
+      </div>
+    );
+  }
+
   return (
     <div className="min-h-screen flex items-center justify-center bg-background px-3 py-6 relative">
-      {/* Dynamic Back Navigation */}
+      {/* Back navigation */}
       <div className="absolute top-4 left-4">
         <Button
           type="button"
@@ -88,7 +110,7 @@ export default function CustomerPortalLogin() {
           </p>
         </div>
 
-        {/* Compact Form Card */}
+        {/* Form Card */}
         <Card className="rounded-xl border-border/80 shadow-none bg-card">
           <CardContent className="p-3.5">
             <form onSubmit={handleLogin} className="space-y-2.5">

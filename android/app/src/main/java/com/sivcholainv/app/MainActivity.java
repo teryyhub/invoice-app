@@ -1,4 +1,4 @@
-package com.sivcholainv.app;
+package com.cminvoice.app;
 
 import com.getcapacitor.BridgeActivity;
 

@@ -1,8 +1,10 @@
 // src/pages/Customers.jsx
 import React, { useState, useMemo } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import { Invoice } from '@/api/invoices';
 import { VendorProfile } from '@/api/vendorProfiles';
+import { useAuth } from '@/lib/AuthContext';
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import {
@@ -22,6 +24,7 @@ import {
   RotateCw,
 } from 'lucide-react';
 import { format, isValid } from 'date-fns';
+import { toast } from 'sonner';
 
 const SORT_OPTIONS = [
   { key: 'totalSpent', label: 'Value', defaultDir: 'desc' },
@@ -48,6 +51,8 @@ const EMPTY_DRAFT = {
 };
 
 export default function Customers() {
+  const { user } = useAuth();
+  const navigate = useNavigate();
   const [hasLoaded, setHasLoaded] = useState(false);
   const [search, setSearch] = useState('');
   const [showFilters, setShowFilters] = useState(false);
@@ -65,9 +70,9 @@ export default function Customers() {
     isFetching: fetchingInvoices,
     refetch: refetchInvoices,
   } = useQuery({
-    queryKey: ['customers-derived'],
-    queryFn: () => Invoice.list(1000),
-    enabled: hasLoaded,
+    queryKey: ['customers-derived', user?.id],
+    queryFn: () => Invoice.list(99999),
+    enabled: hasLoaded && !!user?.id,
     staleTime: Infinity,
     refetchOnWindowFocus: false,
   });
@@ -78,9 +83,9 @@ export default function Customers() {
     isFetching: fetchingVendors,
     refetch: refetchVendors,
   } = useQuery({
-    queryKey: ['vendors'],
+    queryKey: ['vendors', user?.id],
     queryFn: () => VendorProfile.list(100),
-    enabled: hasLoaded,
+    enabled: hasLoaded && !!user?.id,
     staleTime: Infinity,
     refetchOnWindowFocus: false,
   });
@@ -95,6 +100,7 @@ export default function Customers() {
   const handleRefresh = () => {
     refetchInvoices();
     refetchVendors();
+    toast.success("Customer database synced");
   };
 
   const vendorLabel = useMemo(() => {
@@ -245,68 +251,55 @@ export default function Customers() {
     a.download = `customers_${new Date().toISOString().slice(0, 10)}.csv`;
     a.click();
     URL.revokeObjectURL(url);
+    toast.success("Customer list exported to CSV");
   };
 
   return (
-    <div className="space-y-2.5 max-w-5xl mx-auto">
+    <div className="space-y-2 max-w-5xl mx-auto pb-6">
       {/* Header */}
-      <div className="flex items-center justify-between gap-2">
-        <div className="leading-tight">
-          <h1 className="text-base font-bold text-foreground">Customers</h1>
-          <p className="text-[10px] text-muted-foreground">
-            {hasLoaded ? `${filtered.length} of ${customers.length} total records` : 'On-demand directory view'}
-          </p>
+      <div className="flex items-center justify-between border-b border-border/60 pb-1.5">
+        <div>
+          <h1 className="text-xs font-bold tracking-tight text-foreground">Customers Directory</h1>
         </div>
 
-        <div className="flex items-center gap-1.5">
-          {hasLoaded ? (
+        <div className="flex items-center gap-1 shrink-0">
+          {hasLoaded && (
             <>
               <Button
-                variant="outline"
+                variant="ghost"
                 size="sm"
                 onClick={handleRefresh}
                 disabled={isRefreshing}
-                className="h-7 px-2 text-[11px] gap-1 rounded-md"
-                title="Refresh customer database"
+                className="h-7 w-7 p-0 rounded text-muted-foreground hover:text-foreground cursor-pointer"
+                title="Sync database"
               >
-                <RotateCw className={`w-3 h-3 ${isRefreshing ? 'animate-spin' : ''}`} />
-                <span className="hidden sm:inline">Sync</span>
+                <RotateCw className={`w-4 h-4 ${isRefreshing ? 'animate-spin' : ''}`} />
               </Button>
-              <Button variant="outline" size="sm" onClick={downloadCSV} className="h-7 px-2 text-[11px] gap-1 rounded-md">
-                <Download className="w-3 h-3" />
+              <Button variant="outline" size="sm" onClick={downloadCSV} className="h-7 px-2 text-[13px] font-semibold gap-1 rounded shadow-none">
+                <Download className="w-3 h-3 text-[#004C8F]" />
                 <span>CSV</span>
               </Button>
             </>
-          ) : (
-            <Button
-              size="sm"
-              onClick={handleInitialLoad}
-              className="h-7 px-3 text-xs gap-1.5 font-semibold rounded-md shadow-xs"
-            >
-              <Database className="w-3.5 h-3.5" />
-              <span>Load Data</span>
-            </Button>
           )}
         </div>
       </div>
 
       {/* Unloaded State */}
       {!hasLoaded ? (
-        <Card className="rounded-xl border-dashed border-border/80 bg-card/50 shadow-none">
-          <CardContent className="p-8 text-center flex flex-col items-center justify-center space-y-2.5">
-            <div className="w-10 h-10 rounded-full bg-primary/10 text-primary flex items-center justify-center">
-              <Users className="w-5 h-5 stroke-[2.2]" />
+        <Card className="rounded-md border-dashed border-border/80 bg-card/40 shadow-none">
+          <CardContent className="p-8 text-center flex flex-col items-center justify-center space-y-2">
+            <div className="w-8 h-8 rounded-full bg-muted flex items-center justify-center text-muted-foreground">
+              <Users className="w-4 h-4" />
             </div>
             <div className="space-y-0.5">
-              <p className="text-xs font-bold text-foreground">Customer Database Ready</p>
-              <p className="text-[11px] text-muted-foreground max-w-xs mx-auto leading-normal">
-                Data fetching is paused to conserve bandwidth and system memory. Click below to load customer metrics.
+              <p className="text-[13px] font-bold text-foreground">Customer Database</p>
+              <p className="text-[12px] text-muted-foreground max-w-xs mx-auto">
               </p>
             </div>
             <Button
               size="sm"
               onClick={handleInitialLoad}
-              className="h-8 px-4 text-xs font-semibold gap-1.5 rounded-lg shadow-xs mt-1"
+              className="h-7 px-3 text-[12px] font-semibold rounded shadow-none mt-1 bg-[#004C8F] text-white"
             >
               <Database className="w-3.5 h-3.5" />
               <span>Load Customer Directory</span>
@@ -314,9 +307,9 @@ export default function Customers() {
           </CardContent>
         </Card>
       ) : isLoadingData ? (
-        <div className="flex flex-col items-center justify-center py-14 space-y-2">
-          <Loader2 className="w-5 h-5 animate-spin text-primary" />
-          <p className="text-xs text-muted-foreground">Aggregating records...</p>
+        <div className="flex flex-col items-center justify-center py-12 space-y-2">
+          <Loader2 className="w-5 h-5 animate-spin text-[#004C8F]" />
+          <p className="text-xs text-muted-foreground font-medium">Aggregating records...</p>
         </div>
       ) : (
         <>
@@ -331,7 +324,7 @@ export default function Customers() {
                   setSearch(e.target.value);
                   setPage(1);
                 }}
-                className="w-full rounded-md border border-border bg-card pl-8 pr-7 py-1 text-xs text-foreground placeholder:text-muted-foreground outline-none focus:border-primary transition-colors"
+                className="w-full rounded-md border border-border bg-background pl-8 pr-7 py-1 text-xs text-foreground placeholder:text-muted-foreground outline-none focus:border-[#004C8F] transition-colors"
               />
               {search && (
                 <button
@@ -353,12 +346,12 @@ export default function Customers() {
                 setDraft({ ...applied });
                 setShowFilters((v) => !v);
               }}
-              className="h-7 px-2 text-[11px] gap-1 shrink-0 rounded-md"
+              className="h-7 px-2 text-xs gap-1 shrink-0 rounded shadow-none"
             >
-              <SlidersHorizontal className="w-3 h-3" />
+              <SlidersHorizontal className="w-3 h-3 text-[#004C8F]" />
               <span>Filter</span>
               {activeFilters > 0 && (
-                <span className="bg-primary text-primary-foreground text-[9px] font-bold rounded-full w-3.5 h-3.5 flex items-center justify-center -mr-0.5">
+                <span className="bg-[#004C8F] text-white text-[9px] font-bold rounded-full w-3.5 h-3.5 flex items-center justify-center -mr-0.5">
                   {activeFilters}
                 </span>
               )}
@@ -367,59 +360,59 @@ export default function Customers() {
 
           {/* Filter Panel */}
           {showFilters && (
-            <Card className="rounded-lg border-border/80 shadow-none bg-muted/20">
+            <Card className="rounded-md border-border/80 shadow-2xs bg-muted/40">
               <CardContent className="p-2.5 space-y-2">
                 <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-2">
                   <div className="space-y-0.5">
-                    <label className="text-[9px] font-bold uppercase tracking-wider text-muted-foreground">Min. Invoices</label>
+                    <label className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">Min. Invoices</label>
                     <input
                       type="number"
                       min="0"
                       placeholder="e.g. 2"
                       value={draft.minInvoices}
                       onChange={(e) => setDraft((d) => ({ ...d, minInvoices: e.target.value }))}
-                      className="w-full rounded border border-border bg-card px-2 py-1 text-xs outline-none focus:border-primary"
+                      className="w-full rounded border border-border bg-background px-2 py-1 text-xs outline-none focus:border-[#004C8F]"
                     />
                   </div>
 
                   <div className="space-y-0.5">
-                    <label className="text-[9px] font-bold uppercase tracking-wider text-muted-foreground">Min. Spent (₹)</label>
+                    <label className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">Min. Spent (₹)</label>
                     <input
                       type="number"
                       min="0"
                       placeholder="e.g. 10000"
                       value={draft.minSpent}
                       onChange={(e) => setDraft((d) => ({ ...d, minSpent: e.target.value }))}
-                      className="w-full rounded border border-border bg-card px-2 py-1 text-xs outline-none focus:border-primary"
+                      className="w-full rounded border border-border bg-background px-2 py-1 text-xs outline-none focus:border-[#004C8F]"
                     />
                   </div>
 
                   <div className="space-y-0.5">
-                    <label className="text-[9px] font-bold uppercase tracking-wider text-muted-foreground">Date From</label>
+                    <label className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">Date From</label>
                     <input
                       type="date"
                       value={draft.startDate}
                       onChange={(e) => setDraft((d) => ({ ...d, startDate: e.target.value }))}
-                      className="w-full rounded border border-border bg-card px-2 py-1 text-xs outline-none focus:border-primary"
+                      className="w-full rounded border border-border bg-background px-2 py-1 text-xs outline-none focus:border-[#004C8F]"
                     />
                   </div>
 
                   <div className="space-y-0.5">
-                    <label className="text-[9px] font-bold uppercase tracking-wider text-muted-foreground">Date To</label>
+                    <label className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">Date To</label>
                     <input
                       type="date"
                       value={draft.endDate}
                       onChange={(e) => setDraft((d) => ({ ...d, endDate: e.target.value }))}
-                      className="w-full rounded border border-border bg-card px-2 py-1 text-xs outline-none focus:border-primary"
+                      className="w-full rounded border border-border bg-background px-2 py-1 text-xs outline-none focus:border-[#004C8F]"
                     />
                   </div>
 
                   <div className="space-y-0.5 col-span-2 sm:col-span-1">
-                    <label className="text-[9px] font-bold uppercase tracking-wider text-muted-foreground">Vendor</label>
+                    <label className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">Vendor</label>
                     <select
                       value={draft.vendorFilter}
                       onChange={(e) => setDraft((d) => ({ ...d, vendorFilter: e.target.value }))}
-                      className="w-full rounded border border-border bg-card px-2 py-1 text-xs outline-none focus:border-primary truncate"
+                      className="w-full rounded border border-border bg-background px-2 py-1 text-xs outline-none focus:border-[#004C8F] truncate"
                     >
                       <option value="">All</option>
                       {vendors.map((v) => (
@@ -431,7 +424,7 @@ export default function Customers() {
 
                 {/* Sort Options */}
                 <div className="space-y-0.5">
-                  <label className="text-[9px] font-bold uppercase tracking-wider text-muted-foreground">Sort By</label>
+                  <label className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">Sort By</label>
                   <div className="grid grid-cols-2 sm:grid-cols-4 gap-1">
                     {SORT_OPTIONS.map((opt) => {
                       const isActive = draft.sortKey === opt.key;
@@ -444,10 +437,10 @@ export default function Customers() {
                             sortKey: opt.key,
                             sortDir: isActive ? (d.sortDir === 'asc' ? 'desc' : 'asc') : opt.defaultDir,
                           }))}
-                          className={`py-1 px-1.5 rounded text-[10px] font-semibold border flex items-center justify-center gap-1 transition-colors ${
+                          className={`py-1 px-1.5 rounded text-xs font-semibold border flex items-center justify-center gap-1 transition-colors cursor-pointer ${
                             isActive
-                              ? 'bg-primary text-primary-foreground border-primary'
-                              : 'bg-card text-muted-foreground border-border hover:text-foreground'
+                              ? 'bg-[#004C8F] text-white border-[#004C8F]'
+                              : 'bg-background text-muted-foreground border-border hover:text-foreground'
                           }`}
                         >
                           <span>{opt.label}</span>
@@ -462,15 +455,15 @@ export default function Customers() {
                   <button
                     type="button"
                     onClick={clearFilters}
-                    className="text-[10px] text-muted-foreground hover:text-destructive transition-colors underline"
+                    className="text-xs text-muted-foreground hover:text-destructive transition-colors underline cursor-pointer"
                   >
                     Clear all
                   </button>
                   <div className="flex gap-1.5">
-                    <Button variant="ghost" size="sm" onClick={() => setShowFilters(false)} className="h-6 px-2 text-[10px]">
+                    <Button variant="ghost" size="sm" onClick={() => setShowFilters(false)} className="h-6 px-2 text-xs">
                       Cancel
                     </Button>
-                    <Button size="sm" onClick={applyFilters} className="h-6 px-2.5 text-[10px] font-semibold shadow-none">
+                    <Button size="sm" onClick={applyFilters} className="h-6 px-2.5 text-xs font-semibold shadow-none bg-[#004C8F] text-white">
                       Apply
                     </Button>
                   </div>
@@ -480,29 +473,28 @@ export default function Customers() {
           )}
 
           {/* Desktop Table View */}
-          <div className="hidden md:block rounded-lg border border-border bg-card overflow-hidden shadow-none">
-            <table className="w-full text-xs text-left">
-              <thead className="bg-muted/50 text-muted-foreground text-[10px] uppercase border-b border-border font-semibold">
+          <div className="hidden md:block rounded-md border border-border/80 bg-card overflow-hidden shadow-2xs">
+            <table className="w-full text-xs text-left font-mono">
+              <thead className="bg-muted/40 text-muted-foreground text-[11px] uppercase border-b border-border/60 font-bold">
                 <tr>
-                  <th className="px-3 py-1.5">
-                    <button className="flex items-center gap-1 hover:text-foreground" onClick={() => handleHeaderSort('name')}>
+                  <th className="px-3 py-1.5 font-sans">
+                    <button className="flex items-center gap-1 hover:text-foreground cursor-pointer" onClick={() => handleHeaderSort('name')}>
                       Customer <SortIcon active={applied.sortKey === 'name'} dir={applied.sortDir} />
                     </button>
                   </th>
                   <th className="px-3 py-1.5">Mobile</th>
-                  <th className="px-3 py-1.5">Address</th>
                   <th className="px-3 py-1.5">
-                    <button className="flex items-center gap-1 hover:text-foreground" onClick={() => handleHeaderSort('lastDate')}>
+                    <button className="flex items-center gap-1 hover:text-foreground cursor-pointer" onClick={() => handleHeaderSort('lastDate')}>
                       Last Date <SortIcon active={applied.sortKey === 'lastDate'} dir={applied.sortDir} />
                     </button>
                   </th>
-                  <th className="px-3 py-1.5 text-center">
-                    <button className="flex items-center gap-1 mx-auto hover:text-foreground" onClick={() => handleHeaderSort('totalInvoices')}>
+                  <th className="px-3 py-1.5 text-center font-sans">
+                    <button className="flex items-center gap-1 mx-auto hover:text-foreground cursor-pointer" onClick={() => handleHeaderSort('totalInvoices')}>
                       Bills <SortIcon active={applied.sortKey === 'totalInvoices'} dir={applied.sortDir} />
                     </button>
                   </th>
-                  <th className="px-3 py-1.5 text-right">
-                    <button className="flex items-center gap-1 ml-auto hover:text-foreground" onClick={() => handleHeaderSort('totalSpent')}>
+                  <th className="px-3 py-1.5 text-right font-sans">
+                    <button className="flex items-center gap-1 ml-auto hover:text-foreground cursor-pointer" onClick={() => handleHeaderSort('totalSpent')}>
                       Total <SortIcon active={applied.sortKey === 'totalSpent'} dir={applied.sortDir} />
                     </button>
                   </th>
@@ -511,9 +503,9 @@ export default function Customers() {
               <tbody className="divide-y divide-border/60">
                 {paginatedList.length === 0 ? (
                   <tr>
-                    <td colSpan={6} className="text-center py-8 text-muted-foreground text-xs space-y-2">
+                    <td colSpan={5} className="text-center py-8 text-muted-foreground text-xs space-y-2">
                       <p>No matching customers found.</p>
-                      <button onClick={clearFilters} className="text-primary underline text-[11px] font-medium">
+                      <button onClick={clearFilters} className="text-[#004C8F] underline text-xs font-medium cursor-pointer">
                         Reset search and filters
                       </button>
                     </td>
@@ -524,26 +516,29 @@ export default function Customers() {
                     const formattedDate = dateObj && isValid(dateObj) ? format(dateObj, 'dd/MM/yy') : '—';
 
                     return (
-                      <tr key={c.id} className="hover:bg-muted/30 transition-colors leading-tight">
-                        <td className="px-3 py-1.5 font-semibold text-foreground">
+                      <tr 
+                        key={c.id} 
+                        onClick={() => navigate(`/customer/${c.mobile}`)}
+                        className="hover:bg-accent/40 transition-colors leading-tight cursor-pointer"
+                      >
+                        <td className="px-3 py-1.5 font-bold text-foreground font-sans">
                           <div className="truncate max-w-[170px]">{c.name}</div>
                           {c.vendorIds.size > 0 && (
                             <div className="flex flex-wrap gap-1 mt-0.5">
                               {[...c.vendorIds].map((vid) => (
-                                <span key={vid} className="text-[8px] bg-muted text-muted-foreground rounded px-1 leading-none py-0.5">
+                                <span key={vid} className="text-[9px] bg-secondary text-secondary-foreground rounded px-1 leading-none py-0.5 font-mono">
                                   {vendorLabel[vid] || vid}
                                 </span>
                               ))}
                             </div>
                           )}
                         </td>
-                        <td className="px-3 py-1.5 font-mono text-[11px] text-muted-foreground">{c.mobile}</td>
-                        <td className="px-3 py-1.5 text-muted-foreground truncate max-w-[180px] text-[11px]">{c.address}</td>
-                        <td className="px-3 py-1.5 text-muted-foreground font-mono text-[10px] whitespace-nowrap">
+                        <td className="px-3 py-1.5 text-muted-foreground">{c.mobile}</td>
+                        <td className="px-3 py-1.5 text-muted-foreground whitespace-nowrap">
                           {formattedDate}
                         </td>
-                        <td className="px-3 py-1.5 text-center font-bold">{c.totalInvoices}</td>
-                        <td className="px-3 py-1.5 text-right font-black text-foreground">
+                        <td className="px-3 py-1.5 text-center font-bold font-sans">{c.totalInvoices}</td>
+                        <td className="px-3 py-1.5 text-right font-black text-foreground font-sans">
                           ₹{c.totalSpent.toLocaleString('en-IN')}
                         </td>
                       </tr>
@@ -555,11 +550,11 @@ export default function Customers() {
           </div>
 
           {/* Mobile Card View */}
-          <div className="grid grid-cols-1 gap-1.5 md:hidden">
+          <div className="grid grid-cols-1 gap-2 md:hidden">
             {paginatedList.length === 0 ? (
-              <div className="text-center py-8 text-muted-foreground text-xs space-y-2 bg-card rounded-lg border border-border">
+              <div className="text-center py-8 text-muted-foreground text-xs space-y-2 bg-card rounded-md border border-border/80">
                 <p>No matching customers found.</p>
-                <button onClick={clearFilters} className="text-primary underline text-[11px] font-medium">
+                <button onClick={clearFilters} className="text-[#004C8F] underline text-xs font-medium">
                   Reset search and filters
                 </button>
               </div>
@@ -569,27 +564,27 @@ export default function Customers() {
                 const formattedDate = dateObj && isValid(dateObj) ? format(dateObj, 'dd/MM/yy') : '—';
 
                 return (
-                  <Card key={c.id} className="rounded-lg border-border/80 shadow-none">
+                  <Card 
+                    key={c.id} 
+                    onClick={() => navigate(`/customer/${c.mobile}`)}
+                    className="rounded-md border-border/80 shadow-2xs hover:border-primary/50 transition-colors cursor-pointer bg-card"
+                  >
                     <CardContent className="p-2.5 space-y-1.5 leading-tight">
                       <div className="flex items-start justify-between gap-2">
                         <div className="min-w-0">
-                          <p className="font-bold text-xs text-foreground truncate">{c.name}</p>
-                          <p className="text-[10px] text-muted-foreground font-mono">{c.mobile}</p>
+                          <p className="font-bold text-[13px] text-foreground truncate">{c.name}</p>
+                          <p className="text-[12px] text-muted-foreground font-mono mt-0.5">{c.mobile}</p>
                         </div>
-                        <span className="text-xs font-black text-primary shrink-0">
+                        <span className="text-xs font-black text-[#004C8F] font-mono shrink-0">
                           ₹{c.totalSpent.toLocaleString('en-IN')}
                         </span>
                       </div>
 
-                      <p className="text-[10px] text-muted-foreground truncate">{c.address}</p>
-
-                      <div className="flex items-center justify-between pt-1 border-t border-border/50 text-[10px]">
-                        <div className="flex items-center gap-1.5 text-muted-foreground">
-                          <span className="flex items-center gap-0.5">
-                            <Calendar className="w-2.5 h-2.5" /> {formattedDate}
-                          </span>
+                      <div className="flex items-center justify-between pt-1.5 border-t border-border/60 text-[12px]">
+                        <div className="flex items-center gap-1 text-muted-foreground font-mono">
+                          <Calendar className="w-3 h-3" /> {formattedDate}
                         </div>
-                        <span className="font-bold text-muted-foreground">
+                        <span className="font-bold text-muted-foreground font-sans">
                           {c.totalInvoices} bill{c.totalInvoices !== 1 ? 's' : ''}
                         </span>
                       </div>
@@ -604,26 +599,26 @@ export default function Customers() {
           {filtered.length > 0 && (
             <div className="flex items-center justify-between px-1 py-1 text-xs text-muted-foreground">
               <div className="flex items-center gap-1.5">
-                <span className="text-[10px]">Rows:</span>
+                <span className="text-[11px]">Rows:</span>
                 <select
                   value={perPage}
                   onChange={(e) => {
                     setPerPage(Number(e.target.value));
                     setPage(1);
                   }}
-                  className="h-6 rounded border border-border bg-card px-1 text-[10px] outline-none focus:border-primary font-medium"
+                  className="h-6 rounded border border-border bg-card px-1 text-[11px] outline-none focus:border-[#004C8F] font-medium"
                 >
                   {PER_PAGE_OPTIONS.map((val) => (
                     <option key={val} value={val}>{val}</option>
                   ))}
                 </select>
-                <span className="text-[10px] hidden sm:inline">
+                <span className="text-[11px] hidden sm:inline">
                   ({Math.min((page - 1) * perPage + 1, filtered.length)}–{Math.min(page * perPage, filtered.length)} of {filtered.length})
                 </span>
               </div>
 
               <div className="flex items-center gap-1">
-                <span className="text-[10px] mr-1">
+                <span className="text-[11px] mr-1">
                   Page {page} of {totalPages}
                 </span>
                 <Button
@@ -631,7 +626,7 @@ export default function Customers() {
                   size="sm"
                   disabled={page <= 1}
                   onClick={() => setPage((p) => Math.max(1, p - 1))}
-                  className="h-6 w-6 p-0 rounded-md"
+                  className="h-6 w-6 p-0 rounded"
                 >
                   <ChevronLeft className="w-3 h-3" />
                 </Button>
@@ -640,7 +635,7 @@ export default function Customers() {
                   size="sm"
                   disabled={page >= totalPages}
                   onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
-                  className="h-6 w-6 p-0 rounded-md"
+                  className="h-6 w-6 p-0 rounded"
                 >
                   <ChevronRight className="w-3 h-3" />
                 </Button>

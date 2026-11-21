@@ -11,11 +11,14 @@ import {
   AlertCircle,
   ArrowUpRight,
   RotateCw,
+  ShieldCheck,
+  TrendingUp,
 } from "lucide-react";
 
 import { Invoice } from "@/api/invoices";
 import { VendorProfile } from "@/api/vendorProfiles";
 import { useAuth } from "@/lib/AuthContext";
+import IncentiveBanner from "@/components/dashboard/IncentiveBanner";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 
@@ -25,7 +28,6 @@ const formatCurrency = (val = 0) =>
 export default function Dashboard() {
   const { user } = useAuth();
 
-  // Cached query: Prevents refetching records on tab switches or route changes
   const {
     data: invoices = [],
     isLoading: loadingInvoices,
@@ -35,7 +37,7 @@ export default function Dashboard() {
     queryKey: ["dashboard-invoices", user?.id],
     queryFn: () => Invoice.list(99999),
     enabled: !!user?.id,
-    staleTime: 5 * 60 * 1000, // 5 minutes fresh
+    staleTime: 5 * 60 * 1000,
     refetchOnWindowFocus: false,
   });
 
@@ -50,7 +52,7 @@ export default function Dashboard() {
       return list?.[0] || null;
     },
     enabled: !!user?.id,
-    staleTime: 15 * 60 * 1000, // 15 minutes fresh
+    staleTime: 15 * 60 * 1000,
     refetchOnWindowFocus: false,
   });
 
@@ -61,190 +63,250 @@ export default function Dashboard() {
     refetchVendor();
   };
 
-  const { currentMonth, monthInvoicesCount, totalRevenue } = useMemo(() => {
+  const {
+    currentMonth,
+    monthInvoices,
+    monthInvoicesCount,
+    totalAddonsRevenue,
+    rpc,
+    crossSalePercentage,
+  } = useMemo(() => {
     const monthStr = format(new Date(), "MMM yyyy");
-    let revenue = 0;
+    const currentMonthList = [];
     let count = 0;
+    let addonsCount = 0;
+    let addonsRevenue = 0;
 
     for (let i = 0; i < invoices.length; i++) {
       const inv = invoices[i];
       const dateVal = inv.invoice_date || inv.created_at;
       const parsed = dateVal ? new Date(dateVal) : null;
       if (parsed && isValid(parsed) && format(parsed, "MMM yyyy") === monthStr) {
+        currentMonthList.push(inv);
         count++;
-        revenue += Number(inv.grand_total) || 0;
+
+        if (inv.addons && Array.isArray(inv.addons)) {
+          inv.addons.forEach((addon) => {
+            addonsCount++;
+            addonsRevenue += Number(addon.amount) || 0;
+          });
+        }
       }
     }
 
-    return { currentMonth: monthStr, monthInvoicesCount: count, totalRevenue: revenue };
+    const calculatedRpc = count > 0 ? addonsRevenue / count : 0;
+    const calculatedCrossSale = count > 0 ? (addonsCount / count) * 100 : 0;
+
+    return {
+      currentMonth: monthStr,
+      monthInvoices: currentMonthList,
+      monthInvoicesCount: count,
+      totalAddonsRevenue: addonsRevenue,
+      rpc: calculatedRpc,
+      crossSalePercentage: calculatedCrossSale,
+    };
   }, [invoices]);
 
   if (isLoading) {
     return (
       <div className="flex items-center justify-center py-12">
-        <div className="w-5 h-5 border-2 border-primary/20 border-t-primary rounded-full animate-spin" />
+        <div className="w-5 h-5 border-2 border-[#004C8F]/20 border-t-[#004C8F] rounded-full animate-spin" />
       </div>
     );
   }
 
   return (
-    <div className="space-y-2.5 max-w-5xl mx-auto">
-      {/* Header + Actions */}
-      <div className="flex items-center justify-between gap-2">
+    <div className="space-y-2.5 max-w-5xl mx-auto pb-6">
+      {/* Header & Slim Action Tabs */}
+      <div className="flex items-center justify-between border-b border-border/60 pb-1.5 gap-2">
         <div>
-          <h1 className="text-base font-bold leading-tight text-foreground">Dashboard</h1>
-          <p className="text-[10px] text-muted-foreground leading-none">Financial summary</p>
+          <h1 className="text-xs font-bold tracking-tight text-foreground">Dashboard Overview</h1>
         </div>
-        <div className="flex items-center gap-1.5 shrink-0">
+
+        <div className="flex items-center gap-1 shrink-0">
           <Button
+            type="button"
             variant="ghost"
             size="sm"
             onClick={handleRefresh}
             disabled={fetchingInvoices}
-            className="h-7 w-7 p-0 rounded-md text-muted-foreground hover:text-foreground"
-            title="Sync latest data"
+            className="h-7 w-7 p-0 rounded text-muted-foreground hover:text-foreground cursor-pointer"
+            title="Sync data"
           >
-            <RotateCw className={`w-3 h-3 ${fetchingInvoices ? "animate-spin" : ""}`} />
+            <RotateCw className={`w-4 h-4 ${fetchingInvoices ? "animate-spin" : ""}`} />
           </Button>
 
           <Link to="/invoices">
-            <Button variant="outline" size="sm" className="h-7 px-2 text-[11px] gap-1 rounded-md">
-              <FileText className="w-3 h-3" />
+            <Button type="button" variant="outline" size="md" className="h-6 px-2 text-[13px] font-semibold gap-1 rounded shadow-none">
+              <FileText className="w-3 h-3 text-[#004C8F]" />
               Bills
             </Button>
           </Link>
+
           <Link to="/generate">
-            <Button size="sm" className="h-7 px-2.5 text-[11px] gap-1 font-semibold rounded-md shadow-none">
+            <Button type="button" size="md" className="h-6 px-2.5 text-[13px] font-semibold gap-1 rounded shadow-none bg-[#004C8F] hover:bg-[#003B70] text-white">
               <Upload className="w-3 h-3 stroke-[2.5]" />
-              New
+              New Bill
             </Button>
           </Link>
         </div>
       </div>
 
-      {/* Vendor Setup Notice */}
+      {/* Vendor Setup Notice Banner */}
       {!vendor && (
-        <div className="flex items-center justify-between p-2 bg-primary/10 border border-primary/20 rounded-lg">
-          <div className="flex items-center gap-1.5 min-w-0 pr-1.5">
-            <AlertCircle className="w-3.5 h-3.5 text-primary shrink-0" />
-            <p className="text-[10px] text-primary font-medium truncate">
-              Set up vendor profile to complete invoices.
+        <div className="flex items-center justify-between p-2 bg-[#004C8F]/10 border border-[#004C8F]/30 rounded-md shadow-2xs">
+          <div className="flex items-center gap-1.5 min-w-0 pr-2">
+            <AlertCircle className="w-3.5 h-3.5 text-[#004C8F] shrink-0" />
+            <p className="text-[13px] text-[#004C8F] font-semibold truncate">
+              Vendor profile setup required
             </p>
           </div>
           <Link to="/settings" className="shrink-0">
-            <Button size="sm" className="h-5 px-1.5 text-[9px] font-semibold rounded">
-              Setup
+            <Button type="button" size="sm" className="h-5 px-2 text-[12px] font-bold rounded bg-[#004C8F] text-white">
+              Setup Now
             </Button>
           </Link>
         </div>
       )}
 
-      {/* Compact 2-Metric Grid */}
-      <div className="grid grid-cols-2 gap-2">
-        <Card className="rounded-lg border-border/80 shadow-none">
-          <CardContent className="p-2.5">
-            <div className="flex items-center justify-between text-[10px] uppercase tracking-wider font-semibold text-muted-foreground">
-              <span>Revenue</span>
-              <div className="w-4 h-4 rounded bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 flex items-center justify-center shrink-0">
-                <IndianRupee className="w-2.5 h-2.5 stroke-[2.5]" />
-              </div>
-            </div>
-            <p className="text-base font-black tracking-tight text-foreground leading-tight mt-0.5 truncate">
-              {formatCurrency(totalRevenue)}
-            </p>
-            <p className="text-[9px] text-muted-foreground leading-none mt-0.5 truncate">
-              {currentMonth}
-            </p>
-          </CardContent>
-        </Card>
+      {/* Live Earned Incentive Banner (Synced with Admin Slabs) */}
+      <IncentiveBanner invoices={monthInvoices} periodLabel={currentMonth} />
 
-        <Card className="rounded-lg border-border/80 shadow-none">
-          <CardContent className="p-2.5">
-            <div className="flex items-center justify-between text-[10px] uppercase tracking-wider font-semibold text-muted-foreground">
-              <span>Invoices</span>
-              <div className="w-4 h-4 rounded bg-primary/10 text-primary flex items-center justify-center shrink-0">
-                <FileText className="w-2.5 h-2.5 stroke-[2.5]" />
+              {/* Main Grid: metric pills left, recent ledger right */}
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-2.5">
+
+        {/* Left Column: Metric pills */}
+        <div className="grid grid-cols-2 md:grid-cols-1 gap-2 content-start">
+
+          {/* Invoices */}
+          <div className="w-full min-h-[4.5rem] rounded-3xl md:rounded-full bg-gradient-to-r from-card via-card to-[#004C8F]/15 border-2 border-[#004C8F]/50 shadow-lg flex flex-col md:flex-row md:items-center md:justify-between justify-center gap-1 px-3 md:px-4 py-2 select-none">
+            <div className="flex items-center gap-2 min-w-0">
+              <div className="w-6 h-6 md:w-7 md:h-7 rounded-full bg-[#004C8F] text-white flex items-center justify-center shadow-inner shrink-0">
+                <FileText className="w-3.5 h-3.5 stroke-[2.5]" />
               </div>
+              <span className="text-[11px] uppercase tracking-wider font-extrabold text-muted-foreground whitespace-nowrap">Invoices</span>
             </div>
-            <p className="text-base font-black tracking-tight text-foreground leading-tight mt-0.5">
+            <p className="text-sm font-black tracking-tight text-foreground font-mono leading-none whitespace-nowrap pl-8 md:pl-1">
               {monthInvoicesCount}
             </p>
-            <p className="text-[9px] text-muted-foreground leading-none mt-0.5 truncate">
-              This month
-            </p>
-          </CardContent>
-        </Card>
-      </div>
-
-      {/* Recent Ledger List or Empty State */}
-      {invoices.length > 0 ? (
-        <Card className="rounded-lg border-border/80 shadow-none">
-          <div className="flex items-center justify-between px-2.5 py-1.5 border-b border-border/60">
-            <span className="text-[11px] font-bold tracking-tight text-foreground">
-              Recent Invoices
-            </span>
-            <Link
-              to="/invoices"
-              className="text-[10px] font-semibold text-primary hover:underline flex items-center gap-0.5"
-            >
-              All <ArrowUpRight className="w-2.5 h-2.5" />
-            </Link>
           </div>
 
-          <CardContent className="p-0">
-            <div className="divide-y divide-border/60">
-              {invoices.slice(0, 5).map((inv) => {
-                const rawDate = inv.invoice_date || inv.created_at;
-                const d = rawDate ? new Date(rawDate) : null;
-                const dateStr = d && isValid(d) ? format(d, "dd/MM/yy") : "";
-
-                return (
-                  <Link
-                    key={inv.id}
-                    to={`/invoice/${inv.id}`}
-                    className="flex items-center justify-between px-2.5 py-1.5 hover:bg-accent/40 transition-colors group"
-                  >
-                    <div className="min-w-0 pr-2 leading-tight">
-                      <p className="font-semibold text-[11px] text-foreground group-hover:text-primary transition-colors truncate">
-                        {inv.invoice_number || "Draft Invoice"}
-                      </p>
-                      <p className="text-[9px] text-muted-foreground truncate">
-                        {inv.customer_name || "Walk-in"}
-                      </p>
-                    </div>
-
-                    <div className="flex items-center gap-1.5 shrink-0 text-right leading-tight">
-                      <div>
-                        <p className="font-bold text-[11px] text-foreground tracking-tight">
-                          {formatCurrency(inv.grand_total)}
-                        </p>
-                        <p className="text-[9px] text-muted-foreground">
-                          {dateStr}
-                        </p>
-                      </div>
-                      <ChevronRight className="w-3 h-3 text-muted-foreground/50 group-hover:translate-x-0.5 transition-transform" />
-                    </div>
-                  </Link>
-                );
-              })}
+          {/* Cross-sale revenue */}
+          <div className="w-full min-h-[4.5rem] rounded-3xl md:rounded-full bg-gradient-to-r from-card via-card to-blue-500/15 border-2 border-blue-500/50 shadow-lg flex flex-col md:flex-row md:items-center md:justify-between justify-center gap-1 px-3 md:px-4 py-2 select-none">
+            <div className="flex items-center gap-2 min-w-0">
+              <div className="w-6 h-6 md:w-7 md:h-7 rounded-full bg-blue-600 text-white flex items-center justify-center shadow-inner shrink-0">
+                <IndianRupee className="w-3.5 h-3.5 stroke-[2.5]" />
+              </div>
+              <span className="text-[11px] uppercase tracking-wider font-extrabold text-muted-foreground whitespace-nowrap">Cross-sale</span>
             </div>
-          </CardContent>
-        </Card>
-      ) : (
-        <Card className="rounded-xl border-dashed border-border/80 bg-card/50 shadow-none">
-          <CardContent className="p-6 text-center space-y-2">
-            <p className="text-xs font-bold text-foreground">No invoices generated yet</p>
-            <p className="text-[11px] text-muted-foreground max-w-xs mx-auto">
-              Create your first GST or finance invoice to populate your dashboard ledger.
+            <p className="text-sm font-black tracking-tight text-foreground font-mono leading-none whitespace-nowrap pl-8 md:pl-1">
+              {formatCurrency(totalAddonsRevenue)}
             </p>
-            <Link to="/generate">
-              <Button size="sm" className="h-7 px-3 text-xs font-semibold rounded-md shadow-none mt-1">
-                Create Invoice
-              </Button>
-            </Link>
-          </CardContent>
-        </Card>
-      )}
+          </div>
+
+          {/* RPC */}
+          <div className="w-full min-h-[4.5rem] rounded-3xl md:rounded-full bg-gradient-to-r from-card via-card to-amber-500/15 border-2 border-amber-500/50 shadow-lg flex flex-col md:flex-row md:items-center md:justify-between justify-center gap-1 px-3 md:px-4 py-2 select-none">
+            <div className="flex items-center gap-2 min-w-0">
+              <div className="w-6 h-6 md:w-7 md:h-7 rounded-full bg-amber-500 text-white flex items-center justify-center shadow-inner shrink-0">
+                <TrendingUp className="w-3.5 h-3.5 stroke-[2.5]" />
+              </div>
+              <span className="text-[11px] uppercase tracking-wider font-extrabold text-muted-foreground whitespace-nowrap">RPC</span>
+            </div>
+            <p className="text-sm font-black tracking-tight text-foreground font-mono leading-none whitespace-nowrap pl-8 md:pl-1">
+              {rpc.toFixed(2)}
+            </p>
+          </div>
+
+          {/* Attach rate */}
+          <div className="w-full min-h-[4.5rem] rounded-3xl md:rounded-full bg-gradient-to-r from-card via-card to-purple-500/15 border-2 border-purple-500/50 shadow-lg flex flex-col md:flex-row md:items-center md:justify-between justify-center gap-1 px-3 md:px-4 py-2 select-none">
+            <div className="flex items-center gap-2 min-w-0">
+              <div className="w-6 h-6 md:w-7 md:h-7 rounded-full bg-purple-600 text-white flex items-center justify-center shadow-inner shrink-0">
+                <ShieldCheck className="w-3.5 h-3.5 stroke-[2.5]" />
+              </div>
+              <span className="text-[11px] uppercase tracking-wider font-extrabold text-muted-foreground whitespace-nowrap">Attach</span>
+            </div>
+            <p className="text-sm font-black tracking-tight text-foreground font-mono leading-none whitespace-nowrap pl-8 md:pl-1">
+              {crossSalePercentage.toFixed(1)}%
+            </p>
+          </div>
+
+        </div>
+        {/* Right Column: Recent Invoices Ledger */}
+        <div className="space-y-2">
+          {invoices.length > 0 ? (
+            <Card className="rounded-md border-border/80 shadow-2xs bg-card overflow-hidden">
+              <div className="flex items-center justify-between px-2.5 py-1.5 border-b border-border/60 bg-muted/40">
+                <span className="text-[13px] font-bold tracking-tight text-foreground">
+                  Recent Invoices Ledger
+                </span>
+                <Link
+                  to="/invoices"
+                  className="text-[12px] font-bold text-[#004C8F] hover:underline flex items-center gap-0.5"
+                >
+                  View All <ArrowUpRight className="w-3 h-3" />
+                </Link>
+              </div>
+
+              <CardContent className="p-0">
+                <div className="divide-y divide-border/60">
+                  {invoices.slice(0, 6).map((inv) => {
+                    const rawDate = inv.invoice_date || inv.created_at;
+                    const d = rawDate ? new Date(rawDate) : null;
+                    const dateStr = d && isValid(d) ? format(d, "dd/MM/yy") : "";
+
+                    return (
+                      <Link
+                        key={inv.id}
+                        to={`/invoice/${inv.id}`}
+                        className="flex items-center justify-between px-2.5 py-1 hover:bg-accent/40 transition-colors group"
+                      >
+                        <div className="min-w-0 pr-2 leading-tight">
+                          <p className="font-bold text-[13px] text-foreground group-hover:text-[#004C8F] transition-colors truncate font-mono">
+                            {inv.invoice_number || "Draft Invoice"}
+                          </p>
+                          <p className="text-[12px] text-muted-foreground truncate mt-0.5 font-medium">
+                            {inv.customer_name || "Walk-in Customer"}
+                          </p>
+                        </div>
+
+                        <div className="flex items-center gap-1.5 shrink-0 text-right leading-tight">
+                          <div>
+                            <p className="font-bold text-[13px] text-foreground tracking-tight font-mono">
+                              {formatCurrency(inv.grand_total)}
+                            </p>
+                            <p className="text-[12px] text-muted-foreground font-mono mt-0.5">
+                              {dateStr}
+                            </p>
+                          </div>
+                          <ChevronRight className="w-3 h-3 text-muted-foreground/50 group-hover:translate-x-0.5 transition-transform" />
+                        </div>
+                      </Link>
+                    );
+                  })}
+                </div>
+              </CardContent>
+            </Card>
+          ) : (
+            <Card className="rounded-md border-dashed border-border/80 bg-card/40 shadow-none">
+              <CardContent className="p-5 text-center space-y-1.5">
+                <div className="w-7 h-7 rounded-full bg-muted flex items-center justify-center mx-auto text-muted-foreground">
+                  <FileText className="w-3.5 h-3.5" />
+                </div>
+                <p className="text-[13px] font-bold text-foreground">No invoices generated yet</p>
+                <p className="text-[12px] text-muted-foreground max-w-xs mx-auto">
+                  Create your first GST or finance invoice to populate your dashboard ledger.
+                </p>
+                <Link to="/generate">
+                  <Button type="button" size="sm" className="h-6 px-2.5 text-[12px] font-semibold rounded shadow-none mt-1 bg-[#004C8F] text-white">
+                    Create First Invoice
+                  </Button>
+                </Link>
+              </CardContent>
+            </Card>
+          )}
+        </div>
+
+      </div>
     </div>
   );
 }

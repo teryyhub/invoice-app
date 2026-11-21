@@ -20,6 +20,9 @@ export default function InvoiceTemplate({ invoice, vendor, stampScale = 1 }) {
   const cgst = safeNumber(invoice.cgst);
   const sgst = safeNumber(invoice.sgst);
   const grandTotal = safeNumber(invoice.grand_total);
+  const netLoanAmount = safeNumber(invoice.loan_amount || invoice.grand_total);
+  const schemeName = invoice.scheme_name || invoice.product_description || "N/A";
+  const tenureMonths = invoice.tenure || "6";
 
   return (
     <div
@@ -52,13 +55,13 @@ export default function InvoiceTemplate({ invoice, vendor, stampScale = 1 }) {
         <div className="divide-y-2 divide-black text-[11px]">
           <div className="grid grid-cols-12 items-stretch">
             <div className="col-span-2 border-r border-black p-2 font-bold flex items-center">
-              NAME
+              NAME 
             </div>
             <div className="col-span-4 border-r border-black p-2 break-words leading-snug">
-              : {invoice.customer_name || ""}
+              {invoice.customer_name || ""}
             </div>
             <div className="col-span-2 border-r border-black p-2 font-bold flex items-center">
-              MODE:
+              MODE
             </div>
             <div className="col-span-4 p-2 break-words leading-snug">
               {invoice.mode || "CHOLA"}
@@ -70,10 +73,10 @@ export default function InvoiceTemplate({ invoice, vendor, stampScale = 1 }) {
               MOBILE NO.
             </div>
             <div className="col-span-4 border-r border-black p-2 break-all leading-snug font-mono">
-              : {invoice.customer_mobile || ""}
+              {invoice.customer_mobile || ""}
             </div>
             <div className="col-span-2 border-r border-black p-2 font-bold flex items-center">
-              DATE:
+              DATE
             </div>
             <div className="col-span-4 p-2 leading-snug font-mono">
               {formatDateSafe(invoice.invoice_date)}
@@ -85,10 +88,10 @@ export default function InvoiceTemplate({ invoice, vendor, stampScale = 1 }) {
               ADDRESS
             </div>
             <div className="col-span-4 border-r border-black p-2 break-words leading-relaxed">
-              : {invoice.customer_address || ""}
+              {invoice.customer_address || ""}
             </div>
             <div className="col-span-2 border-r border-black p-2 font-bold flex items-center">
-              INVOICE NO.:
+              INVOICE NO.
             </div>
             {/* Centered vertically and horizontally with prominent bold text */}
             <div className="col-span-4 p-2 flex items-center justify-center text-center font-black text-[15px] break-all leading-none font-mono tracking-wider">
@@ -100,7 +103,7 @@ export default function InvoiceTemplate({ invoice, vendor, stampScale = 1 }) {
             <div className="col-span-2 border-r border-black p-2 font-bold flex items-center">
               APP. ID
             </div>
-            <div className="col-span-10 p-2 break-all leading-snug font-mono">
+            <div className="col-span-4 border-r border-black p-2 break-all leading-snug font-mono">
               {invoice.delivery_order_number || ""}
             </div>
           </div>
@@ -160,7 +163,7 @@ export default function InvoiceTemplate({ invoice, vendor, stampScale = 1 }) {
         </div>
 
         {/* Spacer Lines */}
-        <div className="border-b-2 border-black min-h-[6.25rem] flex">
+        <div className="border-b-2 border-black min-h-[5rem] flex">
           <div className="grid grid-cols-12 w-full self-stretch">
             <div className="col-span-3 border-r border-black" />
             <div className="col-span-1 border-r border-black" />

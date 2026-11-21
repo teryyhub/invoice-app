@@ -4,10 +4,57 @@ import { useQuery } from "@tanstack/react-query";
 import { useNavigate } from "react-router-dom";
 import { useAuth } from "@/lib/AuthContext";
 import { supabase } from "@/api/supabaseClient";
+import { Capacitor, CapacitorHttp } from "@capacitor/core";
+import { toast } from "sonner";
 import {
   Users, ShieldCheck, ShieldOff, ArrowLeft, ChevronRight,
   Search, LogOut, Calendar, Receipt, Store, X, Loader2, LogIn as LoginIcon, Copy, Check,
+  Sliders, Plus, Trash2, RotateCcw, Save,
 } from "lucide-react";
+
+const STORAGE_KEY = "sfe_incentive_custom_slabs_v2";
+
+const DEFAULT_SLAB_CONFIG = {
+  disbSlabs: [
+    { label: "45 & below", cond: "below", val1: 45, val2: 0, mobileRate: 0, cdRate: 0 },
+    { label: "46 to 65", cond: "range", val1: 46, val2: 65, mobileRate: 20, cdRate: 30 },
+    { label: "66 to 85", cond: "range", val1: 66, val2: 85, mobileRate: 30, cdRate: 40 },
+    { label: "85 to 100", cond: "range", val1: 85, val2: 100, mobileRate: 40, cdRate: 50 },
+    { label: "101 to 130", cond: "range", val1: 101, val2: 130, mobileRate: 65, cdRate: 75 },
+    { label: "131 & Above", cond: "above", val1: 131, val2: 0, mobileRate: 80, cdRate: 90 },
+  ],
+  mobileRpcSlabs: [
+    { label: "900 & below", cond: "below", val1: 900, val2: 0, pct: 0.0 },
+    { label: "901 to 1100", cond: "range", val1: 901, val2: 1100, pct: 1.0 },
+    { label: "1101 to 1300", cond: "range", val1: 1101, val2: 1300, pct: 1.5 },
+    { label: "1301 to 1450", cond: "range", val1: 1301, val2: 1450, pct: 2.5 },
+    { label: "1451 to 1600", cond: "range", val1: 1451, val2: 1600, pct: 4.5 },
+    { label: "1601 to 1700", cond: "range", val1: 1601, val2: 1700, pct: 6.0 },
+    { label: "1701 & above", cond: "above", val1: 1701, val2: 0, pct: 8.0 },
+  ],
+  cdRpcSlabs: [
+    { label: "700 & below", cond: "below", val1: 700, val2: 0, pct: 0.0 },
+    { label: "701 to 900", cond: "range", val1: 701, val2: 900, pct: 1.0 },
+    { label: "901 to 1000", cond: "range", val1: 901, val2: 1000, pct: 2.0 },
+    { label: "1001 to 1100", cond: "range", val1: 1001, val2: 1100, pct: 3.0 },
+    { label: "1101 to 1200", cond: "range", val1: 1101, val2: 1200, pct: 4.5 },
+    { label: "1201 to 1300", cond: "range", val1: 1201, val2: 1300, pct: 6.0 },
+    { label: "1301 & above", cond: "above", val1: 1301, val2: 0, pct: 8.0 },
+  ],
+  addlCsSlabs: [
+    { label: "120% & below", cond: "below", val1: 120, val2: 0, pct: 0.0 },
+    { label: "120.01% - 130%", cond: "range", val1: 120.01, val2: 130, pct: 5.0 },
+    { label: "130.01% - 140%", cond: "range", val1: 130.01, val2: 140, pct: 10.0 },
+    { label: "140.01% - 150%", cond: "range", val1: 140.01, val2: 150, pct: 15.0 },
+    { label: "150.01% - 160%", cond: "range", val1: 150.01, val2: 160, pct: 20.0 },
+    { label: "160.01% & above", cond: "above", val1: 160.01, val2: 0, pct: 30.0 },
+  ],
+  collectionRules: {
+    FEMI: { emiTarget: 99.75, emiRate: 50, bounceEffTarget: 70.0, bounceRate: 100, qualifier: 99.0, deductionPct: 30.0 },
+    SEMI: { emiTarget: 99.5, emiRate: 50, bounceEffTarget: 65.0, bounceRate: 75, qualifier: 99.0, deductionPct: 20.0 },
+    TEMI: { emiTarget: 99.25, emiRate: 50, bounceEffTarget: 60.0, bounceRate: 50, qualifier: 98.75, deductionPct: 10.0 },
+  },
+};
 
 function fmt(dateStr) {
   if (!dateStr) return "—";
@@ -52,13 +99,463 @@ function StatCard({ icon, label, value, accent }) {
   );
 }
 
+// ── Incentive Slabs Modal ──────────────────────────────────────────────────
+
+function IncentiveSlabsModal({ onClose }) {
+  const [config, setConfig] = useState(() => {
+    try {
+      const saved = localStorage.getItem(STORAGE_KEY);
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        if (parsed && parsed.disbSlabs && parsed.collectionRules) return parsed;
+      }
+    } catch (e) {
+      console.error("Failed to load slabs:", e);
+    }
+    return JSON.parse(JSON.stringify(DEFAULT_SLAB_CONFIG));
+  });
+
+  useEffect(() => {
+    function handleKeyDown(e) {
+      if (e.key === "Escape") onClose();
+    }
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [onClose]);
+
+  const updateSlabRow = (sectionKey, index, field, value) => {
+    setConfig((prev) => {
+      const updated = [...prev[sectionKey]];
+      updated[index] = {
+        ...updated[index],
+        [field]: field === "label" || field === "cond" ? value : parseFloat(value) || 0,
+      };
+      return { ...prev, [sectionKey]: updated };
+    });
+  };
+
+  const addSlabRow = (sectionKey) => {
+    setConfig((prev) => {
+      const newRow =
+        sectionKey === "disbSlabs"
+          ? { label: "New Slab", cond: "range", val1: 0, val2: 0, mobileRate: 0, cdRate: 0 }
+          : { label: "New Slab", cond: "range", val1: 0, val2: 0, pct: 0 };
+      return { ...prev, [sectionKey]: [...prev[sectionKey], newRow] };
+    });
+  };
+
+  const removeSlabRow = (sectionKey, index) => {
+    setConfig((prev) => {
+      if (prev[sectionKey].length <= 1) {
+        toast.error("At least 1 slab row is required!");
+        return prev;
+      }
+      return {
+        ...prev,
+        [sectionKey]: prev[sectionKey].filter((_, idx) => idx !== index),
+      };
+    });
+  };
+
+  const updateCollectionRule = (bucket, field, value) => {
+    setConfig((prev) => ({
+      ...prev,
+      collectionRules: {
+        ...prev.collectionRules,
+        [bucket]: {
+          ...prev.collectionRules[bucket],
+          [field]: parseFloat(value) || 0,
+        },
+      },
+    }));
+  };
+
+  const handleSave = () => {
+    try {
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(config));
+      toast.success("Incentive slabs saved successfully!");
+      onClose();
+    } catch (e) {
+      toast.error("Failed to save slabs: " + e.message);
+    }
+  };
+
+  const handleRestoreDefaults = () => {
+    const fresh = JSON.parse(JSON.stringify(DEFAULT_SLAB_CONFIG));
+    setConfig(fresh);
+    try {
+      localStorage.removeItem(STORAGE_KEY);
+      toast.success("Default incentive slabs restored!");
+    } catch (e) {
+      console.error(e);
+    }
+  };
+
+  const renderSlabTable = (sectionKey, isDisb = false) => {
+    const rows = config[sectionKey] || [];
+    return (
+      <div className="overflow-x-auto">
+        <table className="w-full text-left border-collapse min-w-[480px] text-xs">
+          <thead>
+            <tr className="border-b border-border text-muted-foreground font-bold text-[10px] uppercase">
+              <th className="py-1.5 px-2">Label</th>
+              <th className="py-1.5 px-2">Condition</th>
+              <th className="py-1.5 px-2">Col 1</th>
+              <th className="py-1.5 px-2">Col 2</th>
+              {isDisb ? (
+                <>
+                  <th className="py-1.5 px-2">Mobile Rate (₹)</th>
+                  <th className="py-1.5 px-2">CD Rate (₹)</th>
+                </>
+              ) : (
+                <th className="py-1.5 px-2">{sectionKey === "addlCsSlabs" ? "Additional %" : "Inc %"}</th>
+              )}
+              <th className="py-1.5 px-2 text-center w-10">Del</th>
+            </tr>
+          </thead>
+          <tbody className="divide-y divide-border/60">
+            {rows.map((row, idx) => (
+              <tr key={idx}>
+                <td className="p-1">
+                  <input
+                    type="text"
+                    value={row.label}
+                    onChange={(e) => updateSlabRow(sectionKey, idx, "label", e.target.value)}
+                    className="w-full bg-background border border-border rounded px-2 py-1 text-xs font-semibold text-foreground min-w-[90px]"
+                  />
+                </td>
+                <td className="p-1">
+                  <select
+                    value={row.cond}
+                    onChange={(e) => updateSlabRow(sectionKey, idx, "cond", e.target.value)}
+                    className="w-full bg-background border border-border rounded px-1.5 py-1 text-xs font-bold text-primary"
+                  >
+                    <option value="below">Below (≤)</option>
+                    <option value="range">Range</option>
+                    <option value="above">Above (≥)</option>
+                  </select>
+                </td>
+                <td className="p-1">
+                  <input
+                    type="number"
+                    step="any"
+                    value={row.val1}
+                    onChange={(e) => updateSlabRow(sectionKey, idx, "val1", e.target.value)}
+                    className="w-full bg-background border border-border rounded px-2 py-1 text-xs font-mono text-foreground min-w-[60px]"
+                  />
+                </td>
+                <td className="p-1">
+                  <input
+                    type="number"
+                    step="any"
+                    value={row.val2}
+                    disabled={row.cond !== "range"}
+                    onChange={(e) => updateSlabRow(sectionKey, idx, "val2", e.target.value)}
+                    className={`w-full bg-background border border-border rounded px-2 py-1 text-xs font-mono text-foreground min-w-[60px] ${
+                      row.cond !== "range" ? "opacity-40 cursor-not-allowed" : ""
+                    }`}
+                  />
+                </td>
+                {isDisb ? (
+                  <>
+                    <td className="p-1">
+                      <input
+                        type="number"
+                        step="any"
+                        value={row.mobileRate}
+                        onChange={(e) => updateSlabRow(sectionKey, idx, "mobileRate", e.target.value)}
+                        className="w-full bg-background border border-border rounded px-2 py-1 text-xs font-mono text-foreground min-w-[60px]"
+                      />
+                    </td>
+                    <td className="p-1">
+                      <input
+                        type="number"
+                        step="any"
+                        value={row.cdRate}
+                        onChange={(e) => updateSlabRow(sectionKey, idx, "cdRate", e.target.value)}
+                        className="w-full bg-background border border-border rounded px-2 py-1 text-xs font-mono text-foreground min-w-[60px]"
+                      />
+                    </td>
+                  </>
+                ) : (
+                  <td className="p-1">
+                    <input
+                      type="number"
+                      step="any"
+                      value={row.pct}
+                      onChange={(e) => updateSlabRow(sectionKey, idx, "pct", e.target.value)}
+                      className="w-full bg-background border border-border rounded px-2 py-1 text-xs font-mono text-foreground min-w-[60px]"
+                    />
+                  </td>
+                )}
+                <td className="p-1 text-center">
+                  <button
+                    type="button"
+                    onClick={() => removeSlabRow(sectionKey, idx)}
+                    className="p-1 text-destructive hover:bg-destructive/10 rounded transition"
+                  >
+                    <Trash2 className="w-3.5 h-3.5 mx-auto" />
+                  </button>
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    );
+  };
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-3 sm:p-6">
+      <div className="bg-card border border-border rounded-xl shadow-2xl w-full max-w-5xl max-h-[90vh] flex flex-col overflow-hidden">
+        {/* Modal Header */}
+        <div className="bg-primary text-primary-foreground px-4 py-3 flex items-center justify-between shrink-0">
+          <div className="flex items-center gap-2">
+            <Sliders className="w-4 h-4" />
+            <div>
+              <h2 className="text-sm font-bold leading-tight">Set Incentive Slabs</h2>
+              <p className="text-[10px] opacity-80">
+                Configure Disbursement, RPC, Cross-Sell Booster, and Collection slabs
+              </p>
+            </div>
+          </div>
+          <button
+            onClick={onClose}
+            className="p-1 rounded-lg bg-white/10 hover:bg-white/20 transition"
+          >
+            <X className="w-4 h-4" />
+          </button>
+        </div>
+
+        {/* Modal Body */}
+        <div className="p-4 overflow-y-auto space-y-5 flex-1">
+          {/* 1. Disbursement Slabs */}
+          <div className="bg-muted/20 p-3.5 rounded-lg border border-border space-y-2.5">
+            <div className="flex items-center justify-between">
+              <h3 className="font-bold text-foreground uppercase tracking-wider text-xs flex items-center gap-1.5">
+                <span className="w-2 h-2 rounded-full bg-primary" /> 1. Disbursement Slabs
+              </h3>
+              <button
+                type="button"
+                onClick={() => addSlabRow("disbSlabs")}
+                className="px-2.5 py-1 bg-primary text-primary-foreground font-semibold rounded text-[11px] flex items-center gap-1 hover:opacity-90"
+              >
+                <Plus className="w-3 h-3" /> Add Row
+              </button>
+            </div>
+            {renderSlabTable("disbSlabs", true)}
+          </div>
+
+          {/* 2 & 3. Mobile & CD RPC Slabs */}
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+            <div className="bg-muted/20 p-3.5 rounded-lg border border-border space-y-2.5">
+              <div className="flex items-center justify-between">
+                <h3 className="font-bold text-foreground uppercase tracking-wider text-xs flex items-center gap-1.5">
+                  <span className="w-2 h-2 rounded-full bg-indigo-500" /> 2. Mobiles RPC Slabs
+                </h3>
+                <button
+                  type="button"
+                  onClick={() => addSlabRow("mobileRpcSlabs")}
+                  className="px-2 py-1 bg-primary text-primary-foreground font-semibold rounded text-[11px] flex items-center gap-1 hover:opacity-90"
+                >
+                  <Plus className="w-3 h-3" /> Add
+                </button>
+              </div>
+              {renderSlabTable("mobileRpcSlabs", false)}
+            </div>
+
+            <div className="bg-muted/20 p-3.5 rounded-lg border border-border space-y-2.5">
+              <div className="flex items-center justify-between">
+                <h3 className="font-bold text-foreground uppercase tracking-wider text-xs flex items-center gap-1.5">
+                  <span className="w-2 h-2 rounded-full bg-amber-500" /> 3. CD RPC Slabs
+                </h3>
+                <button
+                  type="button"
+                  onClick={() => addSlabRow("cdRpcSlabs")}
+                  className="px-2 py-1 bg-primary text-primary-foreground font-semibold rounded text-[11px] flex items-center gap-1 hover:opacity-90"
+                >
+                  <Plus className="w-3 h-3" /> Add
+                </button>
+              </div>
+              {renderSlabTable("cdRpcSlabs", false)}
+            </div>
+          </div>
+
+          {/* 4. Cross-Sell Booster Slabs */}
+          <div className="bg-muted/20 p-3.5 rounded-lg border border-border space-y-2.5">
+            <div className="flex items-center justify-between">
+              <h3 className="font-bold text-foreground uppercase tracking-wider text-xs flex items-center gap-1.5">
+                <span className="w-2 h-2 rounded-full bg-purple-500" /> 4. Cross-Sell Booster Slabs
+              </h3>
+              <button
+                type="button"
+                onClick={() => addSlabRow("addlCsSlabs")}
+                className="px-2.5 py-1 bg-primary text-primary-foreground font-semibold rounded text-[11px] flex items-center gap-1 hover:opacity-90"
+              >
+                <Plus className="w-3 h-3" /> Add Row
+              </button>
+            </div>
+            {renderSlabTable("addlCsSlabs", false)}
+          </div>
+
+          {/* 5. Collection Parameter Slabs */}
+          <div className="bg-muted/20 p-3.5 rounded-lg border border-border space-y-2.5">
+            <h3 className="font-bold text-foreground uppercase tracking-wider text-xs flex items-center gap-1.5">
+              <span className="w-2 h-2 rounded-full bg-teal-500" /> 5. Collection Parameter Slabs
+            </h3>
+            <div className="overflow-x-auto">
+              <table className="w-full text-left border-collapse min-w-[620px] text-xs">
+                <thead>
+                  <tr className="border-b border-border text-muted-foreground font-bold text-[10px] uppercase">
+                    <th className="py-1.5 px-2">Bucket</th>
+                    <th className="py-1.5 px-2">EMI Bounce Res %</th>
+                    <th className="py-1.5 px-2">EMI Rate (₹)</th>
+                    <th className="py-1.5 px-2">Charges Eff %</th>
+                    <th className="py-1.5 px-2">Charges Rate (₹)</th>
+                    <th className="py-1.5 px-2">Qualifier %</th>
+                    <th className="py-1.5 px-2">Deduction %</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-border/60">
+                  {["FEMI", "SEMI", "TEMI"].map((bucket) => {
+                    const rule = config.collectionRules[bucket];
+                    return (
+                      <tr key={bucket}>
+                        <td className="p-1.5 font-extrabold text-foreground">{bucket}</td>
+                        <td className="p-1">
+                          <input
+                            type="number"
+                            step="any"
+                            value={rule.emiTarget}
+                            onChange={(e) => updateCollectionRule(bucket, "emiTarget", e.target.value)}
+                            className="w-full bg-background border border-border rounded px-2 py-1 text-xs font-mono text-foreground"
+                          />
+                        </td>
+                        <td className="p-1">
+                          <input
+                            type="number"
+                            step="any"
+                            value={rule.emiRate}
+                            onChange={(e) => updateCollectionRule(bucket, "emiRate", e.target.value)}
+                            className="w-full bg-background border border-border rounded px-2 py-1 text-xs font-mono text-foreground"
+                          />
+                        </td>
+                        <td className="p-1">
+                          <input
+                            type="number"
+                            step="any"
+                            value={rule.bounceEffTarget}
+                            onChange={(e) => updateCollectionRule(bucket, "bounceEffTarget", e.target.value)}
+                            className="w-full bg-background border border-border rounded px-2 py-1 text-xs font-mono text-foreground"
+                          />
+                        </td>
+                        <td className="p-1">
+                          <input
+                            type="number"
+                            step="any"
+                            value={rule.bounceRate}
+                            onChange={(e) => updateCollectionRule(bucket, "bounceRate", e.target.value)}
+                            className="w-full bg-background border border-border rounded px-2 py-1 text-xs font-mono text-foreground"
+                          />
+                        </td>
+                        <td className="p-1">
+                          <input
+                            type="number"
+                            step="any"
+                            value={rule.qualifier}
+                            onChange={(e) => updateCollectionRule(bucket, "qualifier", e.target.value)}
+                            className="w-full bg-background border border-border rounded px-2 py-1 text-xs font-mono text-foreground"
+                          />
+                        </td>
+                        <td className="p-1">
+                          <input
+                            type="number"
+                            step="any"
+                            value={rule.deductionPct}
+                            onChange={(e) => updateCollectionRule(bucket, "deductionPct", e.target.value)}
+                            className="w-full bg-background border border-border rounded px-2 py-1 text-xs font-mono text-destructive font-bold"
+                          />
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+
+        {/* Modal Footer */}
+        <div className="bg-muted/40 px-4 py-3 border-t border-border flex flex-wrap items-center justify-between gap-2 shrink-0">
+          <button
+            type="button"
+            onClick={handleRestoreDefaults}
+            className="px-3 py-1.5 rounded-lg border border-border bg-card hover:bg-destructive/10 hover:text-destructive text-muted-foreground font-semibold text-xs transition flex items-center gap-1.5"
+          >
+            <RotateCcw className="w-3.5 h-3.5" /> Restore Defaults
+          </button>
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              onClick={onClose}
+              className="px-3.5 py-1.5 rounded-lg border border-border bg-card hover:bg-muted text-foreground font-semibold text-xs transition"
+            >
+              Cancel
+            </button>
+            <button
+              type="button"
+              onClick={handleSave}
+              className="px-4 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs shadow-xs transition flex items-center gap-1.5"
+            >
+              <Save className="w-3.5 h-3.5" /> Save Slabs
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 // ── Impersonate button ─────────────────────────────────────────────────────
 
-function LoginAsButton({ userId, email }) {
+function LoginAsButton({ userId }) {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
   const [link, setLink] = useState(null);
   const [copied, setCopied] = useState(false);
+
+  const apiBase = import.meta.env.VITE_API_BASE_URL || "https://sivacholainvoices.vercel.app";
+
+  async function postImpersonate(url, payload) {
+    if (Capacitor.isNativePlatform()) {
+      const response = await CapacitorHttp.post({
+        url,
+        headers: { "Content-Type": "application/json" },
+        data: payload,
+      });
+      const body =
+        typeof response.data === "string"
+          ? response.data
+          : JSON.stringify(response.data ?? {});
+      return {
+        ok: response.status >= 200 && response.status < 300,
+        status: response.status,
+        text: body,
+      };
+    }
+
+    const res = await fetch(url, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload),
+    });
+    const text = await res.text();
+    return {
+      ok: res.ok,
+      status: res.status,
+      text,
+    };
+  }
 
   async function generateLink(e) {
     e.stopPropagation();
@@ -69,22 +566,30 @@ function LoginAsButton({ userId, email }) {
 
     try {
       const { data: { session } } = await supabase.auth.getSession();
-      if (!session) throw new Error("Not authenticated");
+      if (!session?.access_token) throw new Error("Not authenticated");
 
-      const res = await fetch("/api/admin-impersonate", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          target_user_id: userId,
-          admin_token: session.access_token,
-        }),
+      const endpoint = Capacitor.isNativePlatform()
+        ? `${apiBase}/api/admin-impersonate`
+        : "/api/admin-impersonate";
+
+      const { ok, status, text } = await postImpersonate(endpoint, {
+        target_user_id: userId,
+        admin_token: session.access_token,
       });
 
-      const json = await res.json();
-      if (!res.ok) throw new Error(json.error || "Failed");
+      let json = {};
+      try {
+        json = text ? JSON.parse(text) : {};
+      } catch {
+        throw new Error(`Non-JSON response (${status}): ${text.slice(0, 80)}`);
+      }
+
+      if (!ok) throw new Error(json.error || `Request failed (${status})`);
+      if (!json.link) throw new Error("Missing impersonation link");
+
       setLink(json.link);
     } catch (err) {
-      setError(err.message);
+      setError(err.message || "Impersonation failed");
     } finally {
       setLoading(false);
     }
@@ -93,9 +598,13 @@ function LoginAsButton({ userId, email }) {
   async function copyLink(e) {
     e.stopPropagation();
     if (!link) return;
-    await navigator.clipboard.writeText(link);
-    setCopied(true);
-    setTimeout(() => setCopied(false), 2000);
+    try {
+      await navigator.clipboard.writeText(link);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    } catch {
+      toast.error("Clipboard access blocked");
+    }
   }
 
   return (
@@ -103,6 +612,7 @@ function LoginAsButton({ userId, email }) {
       <div className="flex items-center gap-1">
         {link && (
           <button
+            type="button"
             onClick={copyLink}
             className="flex items-center gap-1 px-2 py-1 rounded bg-muted hover:bg-muted/70 text-muted-foreground text-[10px] font-medium"
           >
@@ -111,6 +621,7 @@ function LoginAsButton({ userId, email }) {
           </button>
         )}
         <button
+          type="button"
           onClick={generateLink}
           disabled={loading}
           className="flex items-center gap-1 px-2 py-1 rounded bg-primary/10 hover:bg-primary/20 text-primary text-[10px] font-semibold disabled:opacity-50"
@@ -124,7 +635,7 @@ function LoginAsButton({ userId, email }) {
           {copied ? "Paste in Incognito" : "Copy for Incognito"}
         </p>
       )}
-      {error && <p className="text-[9px] text-destructive max-w-[150px] truncate">{error}</p>}
+      {error && <p className="text-[9px] text-destructive max-w-[180px] break-words text-right">{error}</p>}
     </div>
   );
 }
@@ -132,7 +643,6 @@ function LoginAsButton({ userId, email }) {
 // ── User detail drawer ─────────────────────────────────────────────────────
 
 function UserDrawer({ userId, email, onClose }) {
-  // Close drawer on pressing Escape key
   useEffect(() => {
     function handleKeyDown(e) {
       if (e.key === "Escape") onClose();
@@ -159,7 +669,6 @@ function UserDrawer({ userId, email, onClose }) {
 
   return (
     <div className="fixed inset-0 z-50 flex">
-      {/* Fixed blur utility class name from backdrop-blur-xs to backdrop-blur-sm */}
       <div className="flex-1 bg-black/60 backdrop-blur-sm" onClick={onClose} />
       <div className="w-full max-w-md bg-card border-l border-border h-full overflow-y-auto flex flex-col shadow-xl">
         <div className="sticky top-0 bg-card border-b border-border/80 px-3.5 py-2.5 flex items-center justify-between z-10">
@@ -173,7 +682,7 @@ function UserDrawer({ userId, email, onClose }) {
             </div>
           </div>
           <div className="flex items-center gap-1.5 shrink-0">
-            <LoginAsButton userId={userId} email={email} />
+            <LoginAsButton userId={userId} />
             <button onClick={onClose} className="p-1 rounded hover:bg-muted text-muted-foreground">
               <X className="w-4 h-4" />
             </button>
@@ -268,6 +777,7 @@ function AdminPanel() {
   const navigate = useNavigate();
   const [search, setSearch] = useState("");
   const [selectedUser, setSelectedUser] = useState(null);
+  const [isSlabsModalOpen, setIsSlabsModalOpen] = useState(false);
 
   const { data: profiles, isLoading, error } = useQuery({
     queryKey: ["admin-profiles"],
@@ -297,7 +807,7 @@ function AdminPanel() {
           <h1 className="text-base font-bold text-foreground">Access Denied</h1>
           <p className="text-xs text-muted-foreground">{error.message}</p>
           <button
-            onClick={() => navigate("/", { replace: true })}
+            onClick={() => navigate("/dashboard", { replace: true })}
             className="rounded-md bg-primary text-primary-foreground px-3 py-1.5 text-xs font-semibold"
           >
             Back to Dashboard
@@ -313,7 +823,7 @@ function AdminPanel() {
       <header className="sticky top-0 z-40 bg-card/95 backdrop-blur-md border-b border-border px-3 sm:px-4 py-2 flex items-center justify-between gap-2">
         <div className="flex items-center gap-2">
           <button
-            onClick={() => navigate("/", { replace: true })}
+            onClick={() => navigate("/dashboard", { replace: true })}
             className="p-1 rounded hover:bg-muted text-muted-foreground"
           >
             <ArrowLeft className="w-3.5 h-3.5" />
@@ -327,11 +837,19 @@ function AdminPanel() {
         </div>
 
         <div className="flex items-center gap-2">
+          <button
+            onClick={() => setIsSlabsModalOpen(true)}
+            className="flex items-center gap-1.5 px-2.5 py-1 rounded bg-primary/10 hover:bg-primary/20 text-primary border border-primary/20 text-[11px] font-semibold transition"
+          >
+            <Sliders className="w-3 h-3" />
+            <span>Set Incentive Slabs</span>
+          </button>
+
           <span className="text-[11px] text-muted-foreground hidden sm:block truncate max-w-[140px]">
             {user?.email}
           </span>
           <button
-            onClick={async () => { await signOut(); navigate("/login", { replace: true }); }}
+            onClick={async () => { await signOut(); navigate("/", { replace: true }); }}
             className="flex items-center gap-1 px-2 py-1 rounded border border-border text-[11px] font-medium text-muted-foreground hover:text-foreground hover:bg-muted"
           >
             <LogOut className="w-3 h-3" /> Exit
@@ -405,7 +923,7 @@ function AdminPanel() {
                   <ChevronRight className="w-3.5 h-3.5 text-muted-foreground/60 group-hover:text-foreground shrink-0" />
                 </button>
                 <div className="shrink-0 pl-1 border-l border-border/40">
-                  <LoginAsButton userId={profile.id} email={profile.email} />
+                  <LoginAsButton userId={profile.id} />
                 </div>
               </li>
             ))}
@@ -419,6 +937,10 @@ function AdminPanel() {
           email={selectedUser.email}
           onClose={() => setSelectedUser(null)}
         />
+      )}
+
+      {isSlabsModalOpen && (
+        <IncentiveSlabsModal onClose={() => setIsSlabsModalOpen(false)} />
       )}
     </div>
   );

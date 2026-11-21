@@ -23,6 +23,7 @@ export async function extractDataFromFile(file) {
         customer_name: null, customer_mobile: null, customer_address: null,
         manufacturer: null, category: null, model: null,
         imei_serial: null, product_price: null,
+        scheme_name: null, loan_amount: null,
       },
     };
   }
@@ -151,10 +152,29 @@ function parseDeliveryOrderText(text, lines) {
   const model = extract(/Model:\s*(.+?)\s*IMEI\/Serial/i);
   const imei_serial = extract(/IMEI\/Serial\s*Number:\s*([\w\/\-]{5,30})/i);
 
+  // Scheme code, e.g. VIVO_81
+  const scheme_name =
+    (extract(/Scheme\s*Name\s*:?\s*([A-Z0-9]+_\d{1,4})/i) || "").toUpperCase() || null;
+
   // --- 6. PRICE ---
   const priceMatch = cleanText.match(/Product\s*Price\s*[:\-]?\s*(?:Rs\.?\s*)?(\d[\d,]*)/i) ||
                      cleanText.match(/A\.\s*Product\s*Price\s+(\d[\d,]+)/i);
   const product_price = priceMatch ? parseFloat(priceMatch[1].replace(/,/g, "")) : null;
+
+  // --- 7. NET LOAN AMOUNT ("E. Net Loan Amount (C-2)") ---
+  const toNum = (s) => parseFloat(String(s).replace(/,/g, ""));
+  let loan_amount = null;
+  const netMatch = cleanText.match(
+    /Net\s*Loan\s*Amount\s*(?:\([^)]*\))?\s*[:\-]?\s*(?:Rs\.?\s*)?(\d[\d,]*)/i
+  );
+  if (netMatch) {
+    loan_amount = toNum(netMatch[1]);
+  } else {
+    // Fallback: Loan Amount (A-B) minus Initial Installment
+    const loanC = cleanText.match(/Loan\s*Amount\s*\(A-B\)\s*(\d[\d,]*)/i);
+    const initInst = cleanText.match(/Initial\s*Installment\s*Amount\s*(\d[\d,]*)/i);
+    if (loanC && initInst) loan_amount = toNum(loanC[1]) - toNum(initInst[1]);
+  }
 
   return {
     vendor_code,
@@ -169,6 +189,8 @@ function parseDeliveryOrderText(text, lines) {
     category,
     model,
     imei_serial,
+    scheme_name,
     product_price,
+    loan_amount,
   };
 }

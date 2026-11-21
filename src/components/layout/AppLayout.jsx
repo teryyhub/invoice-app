@@ -1,4 +1,5 @@
-import React, { useState, useEffect } from "react";
+// src/components/layout/AppLayout.jsx
+import React, { useState, useEffect, useMemo } from "react";
 import { Outlet, Link, useLocation, useNavigate } from "react-router-dom";
 import {
   FileText,
@@ -15,17 +16,21 @@ import {
   Search,
   ShieldAlert,
   Calculator,
+  TrendingUp,
+  Award,
 } from "lucide-react";
 import { useAuth } from "@/lib/AuthContext";
+import { supabase } from "@/api/supabaseClient";
 import { cn } from "@/lib/utils";
 import ThemeToggle from "@/components/layout/ThemeToggle";
 import TfaVerifyModal from "@/components/TfaVerifyModal";
 
-const serviceGroups = [
+const baseServiceGroups = [
   {
     category: "Transactions & Records",
     items: [
-      { path: "/", label: "Dashboard", sublabel: "Overview", icon: LayoutDashboard },
+      { path: "/dashboard", label: "Dashboard", sublabel: "Overview", icon: LayoutDashboard },
+      { path: "/generate", label: "Create Invoice", sublabel: "New Bill & GST", icon: Plus },
       { path: "/invoices", label: "Invoices", sublabel: "Past Bills", icon: FileText },
       { path: "/customers", label: "Customers", sublabel: "Directory & Spend", icon: Users },
     ],
@@ -34,6 +39,8 @@ const serviceGroups = [
     category: "Calculators & Portals",
     items: [
       { path: "/emi-calculator", label: "EMI Calculator", sublabel: "Schedule & Principal", icon: Calculator },
+      { path: "/incentive-calculator", label: "Incentive Calculator", sublabel: "Slabs & Payouts", icon: Award },
+      { path: "/statistics", label: "Statistics", sublabel: "Analytics & Trends", icon: TrendingUp },
       { path: "/portal", label: "Customer Portal", sublabel: "Public Lookup", icon: Search },
       { path: "/reports", label: "Reports", sublabel: "Tax & GST", icon: BarChart2 },
     ],
@@ -43,7 +50,7 @@ const serviceGroups = [
     items: [
       { path: "/settings", label: "Vendor Setup", sublabel: "GSTIN & Bank", icon: Settings },
       { path: "/profile", label: "Profile", sublabel: "Security & PIN", icon: UserCircle },
-      { path: "/admin", label: "Admin Panel", sublabel: "System & Users", icon: ShieldAlert },
+      { path: "/admin", label: "Admin Panel", sublabel: "System & Users", icon: ShieldAlert, adminOnly: true },
     ],
   },
 ];
@@ -54,6 +61,7 @@ export default function AppLayout() {
   const { signOut, user } = useAuth();
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [isScrolled, setIsScrolled] = useState(false);
+  const [isAdmin, setIsAdmin] = useState(false);
 
   useEffect(() => {
     const handleScroll = () => setIsScrolled(window.scrollY > 8);
@@ -68,18 +76,51 @@ export default function AppLayout() {
     };
   }, [drawerOpen]);
 
+  // Check if current user is an admin
+  useEffect(() => {
+    async function checkAdminStatus() {
+      if (!user?.id) {
+        setIsAdmin(false);
+        return;
+      }
+      try {
+        const { data } = await supabase
+          .from("profiles")
+          .select("is_admin")
+          .eq("id", user.id)
+          .maybeSingle();
+
+        if (data && data.is_admin) {
+          setIsAdmin(true);
+        } else {
+          setIsAdmin(!!user?.user_metadata?.is_admin);
+        }
+      } catch (err) {
+        console.error("Failed to check admin status:", err);
+        setIsAdmin(!!user?.user_metadata?.is_admin);
+      }
+    }
+    checkAdminStatus();
+  }, [user]);
+
+  const serviceGroups = useMemo(() => {
+    return baseServiceGroups.map((group) => ({
+      ...group,
+      items: group.items.filter((item) => !item.adminOnly || isAdmin),
+    }));
+  }, [isAdmin]);
+
   const handleLogout = async () => {
     await signOut();
-    navigate("/login");
+    navigate("/", { replace: true });
   };
 
   const isCurrentActive = (path) => {
-    if (path === "/") return location.pathname === "/";
     return location.pathname.startsWith(path);
   };
 
   const bottomTabs = [
-    { path: "/", label: "Home", icon: LayoutDashboard },
+    { path: "/dashboard", label: "Home", icon: LayoutDashboard },
     { path: "/invoices", label: "Invoices", icon: FileText },
     { path: "/generate", label: "Create", icon: Plus, isFab: true },
     { path: "/customers", label: "Clients", icon: Users },
@@ -89,28 +130,27 @@ export default function AppLayout() {
   const userInitial = user?.email ? user.email.charAt(0).toUpperCase() : "S";
 
   return (
-    <div className="min-h-screen bg-background text-foreground flex flex-col md:flex-row antialiased font-sans selection:bg-primary/20">
+    <div className="min-h-screen bg-background text-foreground flex flex-col md:flex-row antialiased font-sans selection:bg-[#004C8F]/20">
       <TfaVerifyModal />
 
-      {/* Desktop Sidebar */}
-      <aside className="hidden md:flex w-60 flex-col bg-card/95 backdrop-blur-md border-r border-border fixed inset-y-0 z-30 transition-all">
+      {/* Desktop Web Sidebar */}
+      <aside className="hidden md:flex w-52 flex-col bg-card/95 backdrop-blur-md border-r border-border fixed inset-y-0 z-30 transition-all">
         {/* Brand Header */}
-        <div className="px-3.5 py-3 border-b border-border/70">
+        <div className="px-2.5 py-2 border-b border-border/75 bg-card">
           <div className="flex items-center justify-between">
-            <div className="flex items-center gap-2 min-w-0">
-              <div className="w-8 h-8 rounded-lg bg-primary text-primary-foreground flex items-center justify-center shadow-xs shrink-0">
-                <FileText className="w-4 h-4" />
+            <div className="flex items-center gap-1.5 min-w-0">
+              <div className="w-6 h-6 rounded bg-[#004C8F] text-white flex items-center justify-center font-bold text-[13px] shadow-2xs shrink-0">
+                C
               </div>
               <div className="min-w-0 leading-tight">
-                <div className="flex items-center gap-1">
-                  <h1 className="text-xs font-bold tracking-tight text-foreground truncate">
-                    Invoice Gen Chola
+                <div className="flex-wrap items-center gap-1">
+                  <h1 className="text-[14px] flex-wrap font-bold tracking-tight text-foreground truncate">
+                    CM Invoice
                   </h1>
-                  <span className="text-[8px] font-bold uppercase px-1 py-0.2 rounded bg-primary/10 text-primary">
-                    Pro
+                  <span className="text-[12px] font-extrabold uppercase px-1 py-0.2 rounded bg-[#004C8F]/15 text-[#004C8F]">
+                    Only for Internal Use
                   </span>
                 </div>
-                <p className="text-[10px] text-muted-foreground truncate">Billing & Operations</p>
               </div>
             </div>
             <ThemeToggle />
@@ -118,10 +158,10 @@ export default function AppLayout() {
         </div>
 
         {/* Navigation Categories */}
-        <nav className="flex-1 p-2 space-y-3 overflow-y-auto">
+        <nav className="flex-1 p-1.5 space-y-2 overflow-y-auto">
           {serviceGroups.map((group) => (
             <div key={group.category} className="space-y-0.5">
-              <span className="px-2 text-[9px] font-bold uppercase tracking-wider text-muted-foreground/60">
+              <span className="px-1.5 text-[12px] font-bold uppercase tracking-wider text-muted-foreground/60">
                 {group.category}
               </span>
               <div className="mt-0.5 space-y-0.5">
@@ -133,9 +173,9 @@ export default function AppLayout() {
                       key={item.path}
                       to={item.path}
                       className={cn(
-                        "flex items-center gap-2 px-2.5 py-1.5 rounded-lg text-xs font-medium transition-colors",
+                        "flex items-center gap-2 px-2 py-1 rounded text-[12px] font-medium transition-colors",
                         active
-                          ? "bg-primary text-primary-foreground font-semibold shadow-xs"
+                          ? "bg-[#004C8F] text-white font-semibold shadow-2xs"
                           : "text-muted-foreground hover:bg-accent/60 hover:text-foreground"
                       )}
                     >
@@ -150,13 +190,13 @@ export default function AppLayout() {
         </nav>
 
         {/* Account Footer */}
-        <div className="p-2 border-t border-border/70 space-y-1">
-          <div className="flex items-center justify-between p-1.5 rounded-lg bg-secondary/40 border border-border/50">
-            <div className="flex items-center gap-2 min-w-0">
-              <div className="w-6 h-6 rounded-full bg-primary/15 text-primary flex items-center justify-center font-bold text-[10px] shrink-0">
+        <div className="p-1.5 border-t border-border/75 bg-card">
+          <div className="flex items-center justify-between p-1 rounded bg-secondary/50 border border-border/50">
+            <div className="flex items-center gap-1.5 min-w-0">
+              <div className="w-5 h-5 rounded-full bg-[#004C8F]/15 text-[#004C8F] flex items-center justify-center font-bold text-[15px] shrink-0">
                 {userInitial}
               </div>
-              <p className="text-[11px] font-semibold truncate text-foreground">
+              <p className="text-[12px] font-semibold truncate text-foreground">
                 {user?.email?.split("@")[0] || "Merchant"}
               </p>
             </div>
@@ -165,18 +205,18 @@ export default function AppLayout() {
               className="p-1 rounded text-muted-foreground hover:text-destructive transition-colors shrink-0 cursor-pointer"
               title="Sign Out"
             >
-              <LogOut className="w-3.5 h-3.5" />
+              <LogOut className="w-3 h-3" />
             </button>
           </div>
         </div>
       </aside>
 
-      {/* Mobile Top Bar */}
+      {/* Android / Mobile Top Bar */}
       <header
         className={cn(
-          "md:hidden fixed top-0 left-0 right-0 z-40 transition-colors duration-150",
+          "md:hidden fixed top-0 left-0 right-0 z-40 transition-colors duration-150 pt-[env(safe-area-inset-top)]",
           isScrolled
-            ? "bg-card/95 backdrop-blur-md border-b border-border shadow-xs"
+            ? "bg-card/95 backdrop-blur-md border-b border-border shadow-2xs"
             : "bg-card/90 backdrop-blur-xs border-b border-border/50"
         )}
       >
@@ -187,20 +227,20 @@ export default function AppLayout() {
             aria-label="Account details"
           >
             <div className="relative shrink-0">
-              <div className="w-7 h-7 rounded-full bg-primary text-primary-foreground flex items-center justify-center text-[11px] font-bold">
+              <div className="w-6 h-6 rounded-full bg-[#004C8F] text-white flex items-center justify-center text-[14px] font-bold shadow-2xs">
                 {userInitial}
               </div>
-              <span className="absolute -bottom-0.5 -right-0.5 w-2 h-2 rounded-full bg-emerald-500 ring-1 ring-card" />
+              <span className="absolute -bottom-0.5 -right-0.5 w-1.5 h-1.5 rounded-full bg-emerald-500 ring-1 ring-card" />
             </div>
             <div className="leading-none">
-              <div className="flex items-center gap-0.5">
-                <span className="text-xs font-bold tracking-tight text-foreground">
-                  Invoice Gen Chola
+              <div className="flex items-center gap-1">
+                <span className="text-[13px] font-bold tracking-tight text-foreground">
+                  CM Invoice
                 </span>
-                <ChevronRight className="w-3 h-3 text-muted-foreground" />
+                <ChevronRight className="w-2.5 h-2.5 text-muted-foreground" />
               </div>
-              <span className="text-[9px] font-medium text-emerald-600 dark:text-emerald-400">
-                This page is for Internal Use only, do not share.
+              <span className="text-[12px] font-medium text-emerald-600 dark:text-emerald-400">
+                Internal Use Only
               </span>
             </div>
           </button>
@@ -211,40 +251,38 @@ export default function AppLayout() {
         </div>
       </header>
 
-      {/* Mobile Services Drawer */}
+      {/* Android / Mobile Services Bottom Drawer */}
       {drawerOpen && (
         <div className="md:hidden fixed inset-0 z-50 flex flex-col justify-end bg-black/60 backdrop-blur-xs animate-in fade-in duration-150">
           <div className="fixed inset-0" onClick={() => setDrawerOpen(false)} />
 
-          <div className="relative bg-card rounded-t-2xl border-t border-border shadow-xl p-3.5 max-h-[82vh] overflow-y-auto space-y-3 animate-in slide-in-from-bottom duration-200">
-            <div className="w-8 h-1 bg-muted-foreground/30 rounded-full mx-auto" />
+          <div className="relative bg-card rounded-t-xl border-t border-border shadow-xl p-3 max-h-[82vh] overflow-y-auto space-y-2.5 animate-in slide-in-from-bottom duration-200 pb-[env(safe-area-inset-bottom)]">
+            <div className="w-6 h-1 bg-muted-foreground/30 rounded-full mx-auto" />
 
-            {/* Profile Row */}
             <div className="flex items-center justify-between pb-2 border-b border-border/60">
               <div className="flex items-center gap-2 min-w-0">
-                <div className="w-8 h-8 rounded-lg bg-primary/15 text-primary flex items-center justify-center font-bold text-xs shrink-0">
+                <div className="w-7 h-7 rounded bg-[#004C8F]/15 text-[#004C8F] flex items-center justify-center font-bold text-xs shrink-0">
                   {userInitial}
                 </div>
                 <div className="min-w-0 leading-tight">
                   <h2 className="text-xs font-bold text-foreground truncate">
-                    {user?.email || "Siva's Chola"}
+                    {user?.email || "CM Invoice"}
                   </h2>
-                  <p className="text-[10px] text-muted-foreground">Internal Use Only</p>
+                  <p className="text-[12px] text-muted-foreground">Operations</p>
                 </div>
               </div>
               <button
                 onClick={() => setDrawerOpen(false)}
                 className="p-1 rounded-full text-muted-foreground hover:bg-accent cursor-pointer"
               >
-                <X className="w-4 h-4" />
+                <X className="w-3.5 h-3.5" />
               </button>
             </div>
 
-            {/* All Services */}
-            <div className="space-y-2.5">
+            <div className="space-y-2">
               {serviceGroups.map((group) => (
                 <div key={group.category} className="space-y-1">
-                  <h3 className="text-[9px] font-bold uppercase tracking-wider text-muted-foreground/70 px-0.5">
+                  <h3 className="text-[12px] font-bold uppercase tracking-wider text-muted-foreground/70 px-0.5">
                     {group.category}
                   </h3>
                   <div className="grid grid-cols-2 gap-1.5">
@@ -257,25 +295,25 @@ export default function AppLayout() {
                           to={item.path}
                           onClick={() => setDrawerOpen(false)}
                           className={cn(
-                            "flex items-center gap-2 p-2 rounded-xl border transition-all active:scale-98",
+                            "flex items-center gap-2 p-1.5 rounded border transition-all active:scale-98",
                             active
-                              ? "bg-primary/10 border-primary/40 text-primary"
+                              ? "bg-[#004C8F]/10 border-[#004C8F]/40 text-[#004C8F]"
                               : "bg-secondary/30 border-border/50 text-foreground hover:bg-secondary"
                           )}
                         >
                           <div
                             className={cn(
-                              "w-7 h-7 rounded-lg flex items-center justify-center shrink-0",
-                              active ? "bg-primary text-primary-foreground" : "bg-card text-foreground"
+                              "w-6 h-6 rounded flex items-center justify-center shrink-0",
+                              active ? "bg-[#004C8F] text-white" : "bg-card text-foreground"
                             )}
                           >
-                            <Icon className="w-3.5 h-3.5" />
+                            <Icon className="w-3 h-3" />
                           </div>
                           <div className="min-w-0 leading-none">
-                            <span className="text-[11px] font-semibold truncate block">
+                            <span className="text-[14px] font-semibold truncate block">
                               {item.label}
                             </span>
-                            <span className="text-[8px] text-muted-foreground truncate block mt-0.5">
+                            <span className="text-[13px] text-muted-foreground truncate block mt-0.5">
                               {item.sublabel}
                             </span>
                           </div>
@@ -287,12 +325,12 @@ export default function AppLayout() {
               ))}
             </div>
 
-            <div className="pt-1.5 border-t border-border/60">
+            <div className="pt-1 border-t border-border/60">
               <button
                 onClick={handleLogout}
-                className="w-full flex items-center justify-center gap-1.5 py-2 px-3 rounded-lg text-xs font-semibold text-destructive bg-destructive/10 active:scale-98 transition-transform cursor-pointer"
+                className="w-full flex items-center justify-center gap-1.5 py-1.5 px-3 rounded text-[15px] font-semibold text-destructive bg-destructive/10 active:scale-98 transition-transform cursor-pointer"
               >
-                <LogOut className="w-3.5 h-3.5" />
+                <LogOut className="w-3 h-3" />
                 Sign Out
               </button>
             </div>
@@ -301,15 +339,15 @@ export default function AppLayout() {
       )}
 
       {/* Main Viewport */}
-      <main className="flex-1 md:ml-60 pt-11 pb-16 md:pt-0 md:pb-4 min-h-screen transition-all">
-        <div className="p-2.5 sm:p-4 max-w-5xl mx-auto">
+      <main className="flex-1 md:ml-52 pt-[calc(2.5rem+env(safe-area-inset-top))] pb-[calc(3rem+env(safe-area-inset-bottom))] md:pt-2 md:pb-2 min-h-screen transition-all">
+        <div className="p-2 sm:p-3 max-w-5xl mx-auto">
           <Outlet />
         </div>
       </main>
 
-      {/* Bottom Navigation */}
-      <nav className="md:hidden fixed bottom-0 left-0 right-0 z-40 bg-card/95 backdrop-blur-md border-t border-border/70 pb-[env(safe-area-inset-bottom)]">
-        <div className="flex items-center justify-around h-12 px-1">
+      {/* Android / Mobile Bottom Navigation */}
+      <nav className="md:hidden fixed bottom-0 left-0 right-0 z-40 bg-card/95 backdrop-blur-md border-t border-border/75 pb-[env(safe-area-inset-bottom)]">
+        <div className="flex items-center justify-around h-11 px-1">
           {bottomTabs.map((tab) => {
             const Icon = tab.icon;
 
@@ -318,13 +356,13 @@ export default function AppLayout() {
                 <Link
                   key={tab.path}
                   to={tab.path}
-                  className="flex flex-col items-center -mt-4 group focus:outline-none"
+                  className="flex flex-col items-center -mt-3.5 group focus:outline-none"
                   aria-label="Create Invoice"
                 >
-                  <div className="w-10 h-10 rounded-full bg-primary text-primary-foreground shadow-sm flex items-center justify-center border-2 border-card active:scale-90 transition-transform">
-                    <Icon className="w-5 h-5 stroke-[2.5]" />
+                  <div className="w-12 h-12 rounded-full bg-[#004C8F] text-white shadow-xs flex items-center justify-center border-2 border-card active:scale-90 transition-transform">
+                    <Icon className="w-6 h-6 stroke-[2.5]" />
                   </div>
-                  <span className="text-[9px] font-bold text-primary -mt-0.5">
+                  <span className="text-[12px] font-bold text-[#004C8F] -mt-0.5">
                     {tab.label}
                   </span>
                 </Link>
@@ -338,8 +376,8 @@ export default function AppLayout() {
                   onClick={() => setDrawerOpen(true)}
                   className="flex flex-col items-center justify-center flex-1 py-0.5 text-muted-foreground hover:text-foreground active:scale-95 transition-transform cursor-pointer"
                 >
-                  <Icon className="w-4 h-4" />
-                  <span className="text-[9px] font-medium leading-none mt-0.5">
+                  <Icon className="w-3.5 h-3.5" />
+                  <span className="text-[12px] font-medium leading-none mt-0.5">
                     {tab.label}
                   </span>
                 </button>
@@ -354,11 +392,11 @@ export default function AppLayout() {
                 to={tab.path}
                 className={cn(
                   "flex flex-col items-center justify-center flex-1 py-0.5 transition-all active:scale-95",
-                  active ? "text-primary font-bold" : "text-muted-foreground hover:text-foreground"
+                  active ? "text-[#004C8F] font-bold" : "text-muted-foreground hover:text-foreground"
                 )}
               >
-                <Icon className={cn("w-4 h-4", active && "stroke-[2.2px]")} />
-                <span className="text-[9px] font-medium leading-none mt-0.5">
+                <Icon className={cn("w-3.5 h-3.5", active && "stroke-[2.2px]")} />
+                <span className="text-[12px] font-medium leading-none mt-0.5">
                   {tab.label}
                 </span>
               </Link>

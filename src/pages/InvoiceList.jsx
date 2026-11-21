@@ -1,5 +1,5 @@
 // src/pages/InvoiceList.jsx
-import React, { useState, useMemo, useEffect } from "react";
+import React, { useState, useMemo, useEffect, useRef } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Invoice } from "@/api/invoices";
 import { VendorProfile } from "@/api/vendorProfiles";
@@ -21,8 +21,22 @@ import {
   Database,
   Smartphone,
   AlertCircle,
+  Edit3,
+  Loader2,
+  Calendar as CalendarIcon,
 } from "lucide-react";
-import { format, isValid } from "date-fns";
+import { 
+  format, 
+  isValid, 
+  parseISO, 
+  startOfMonth, 
+  endOfMonth, 
+  eachDayOfInterval, 
+  isSameDay, 
+  isWithinInterval, 
+  addMonths, 
+  subMonths 
+} from "date-fns";
 import { toast } from "sonner";
 import {
   AlertDialog,
@@ -35,8 +49,205 @@ import {
   AlertDialogTitle,
   AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogFooter,
+} from "@/components/ui/dialog";
 
 const PAGE_SIZE_OPTIONS = [10, 20, 50, 100];
+
+const AVAILABLE_ADDONS = [
+  { id: "one_assist", name: "ONE ASSIST HOME ASSURE", amount: 1099 },
+  { id: "anmol_xpress", name: "ANMOL XPRESS HEALTH", amount: 799 },
+  { id: "hdfc_suraksha", name: "HDFC LIFE JEEVAN SURAKSHA", amount: 745 },
+];
+
+function calculateAckoPlan(price) {
+  const p = parseFloat(price) || 0;
+  if (p >= 10000 && p <= 15000) return { id: "acko_mobile", name: "ACKO ADLD MOBILE INSURANCE", amount: 999 };
+  if (p > 15000 && p <= 20000) return { id: "acko_mobile", name: "ACKO ADLD MOBILE INSURANCE", amount: 1399 };
+  if (p > 20000 && p <= 25000) return { id: "acko_mobile", name: "ACKO ADLD MOBILE INSURANCE", amount: 1799 };
+  if (p > 25000 && p <= 30000) return { id: "acko_mobile", name: "ACKO ADLD MOBILE INSURANCE", amount: 2199 };
+  if (p > 30000 && p <= 35000) return { id: "acko_mobile", name: "ACKO ADLD MOBILE INSURANCE", amount: 2499 };
+  if (p > 35000 && p <= 50000) return { id: "acko_mobile", name: "ACKO ADLD MOBILE INSURANCE", amount: 3299 };
+  if (p > 50000 && p <= 70000) return { id: "acko_mobile", name: "ACKO ADLD MOBILE INSURANCE", amount: 4699 };
+  if (p > 70000 && p <= 100000) return { id: "acko_mobile", name: "ACKO ADLD MOBILE INSURANCE", amount: 6599 };
+  if (p > 100000 && p <= 120000) return { id: "acko_mobile", name: "ACKO ADLD MOBILE INSURANCE", amount: 8499 };
+  if (p > 120000 && p <= 140000) return { id: "acko_mobile", name: "ACKO ADLD MOBILE INSURANCE", amount: 9999 };
+  if (p > 140000 && p <= 160000) return { id: "acko_mobile", name: "ACKO ADLD MOBILE INSURANCE", amount: 11599 };
+  if (p > 160000 && p <= 180000) return { id: "acko_mobile", name: "ACKO ADLD MOBILE INSURANCE", amount: 13099 };
+  if (p > 180000 && p <= 200000) return { id: "acko_mobile", name: "ACKO ADLD MOBILE INSURANCE", amount: 14599 };
+  return { id: "acko_mobile", name: "ACKO ADLD MOBILE INSURANCE", amount: 999 };
+}
+
+// Flow Calendar Picker Component (Fixed alignment so it stays within page view)
+function FlowCalendarPicker({ startDate, endDate, onChange }) {
+  const [isOpen, setIsOpen] = useState(false);
+  const [currentMonth, setCurrentMonth] = useState(new Date());
+  const containerRef = useRef(null);
+
+  useEffect(() => {
+    const handleClickOutside = (event) => {
+      if (containerRef.current && !containerRef.current.contains(event.target)) {
+        setIsOpen(false);
+      }
+    };
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => document.removeEventListener("mousedown", handleClickOutside);
+  }, []);
+
+  const start = startDate ? parseISO(startDate) : null;
+  const end = endDate ? parseISO(endDate) : null;
+
+  const handleDayClick = (day) => {
+    if (!start || (start && end)) {
+      onChange({ start: format(day, "yyyy-MM-dd"), end: "" });
+      return;
+    }
+
+    if (start && !end) {
+      if (isSameDay(day, start)) {
+        onChange({ start: format(day, "yyyy-MM-dd"), end: format(day, "yyyy-MM-dd") });
+        setIsOpen(false);
+      } else if (day < start) {
+        onChange({ start: format(day, "yyyy-MM-dd"), end: "" });
+      } else {
+        onChange({ start: format(start, "yyyy-MM-dd"), end: format(day, "yyyy-MM-dd") });
+        setIsOpen(false);
+      }
+    }
+  };
+
+  const formatDisplayLabel = () => {
+    if (!start) return "Filter Date Range";
+    const startStr = isValid(start) ? format(start, "dd/MM/yyyy") : "";
+    const endStr = end && isValid(end) ? format(end, "dd/MM/yyyy") : "";
+
+    if (!endStr || startStr === endStr) {
+      return startStr;
+    }
+    return `${startStr} — ${endStr}`;
+  };
+
+  const monthStart = startOfMonth(currentMonth);
+  const monthEnd = endOfMonth(currentMonth);
+  const daysInMonth = eachDayOfInterval({ start: monthStart, end: monthEnd });
+  const startDayOfWeek = monthStart.getDay();
+
+  return (
+    <div className="relative inline-block" ref={containerRef}>
+      <div
+        onClick={() => setIsOpen(!isOpen)}
+        className="flex items-center gap-1.5 h-7 px-2.5 rounded border border-border bg-card text-xs text-foreground cursor-pointer hover:border-primary/50 transition-colors select-none"
+      >
+        <CalendarIcon className="w-3 h-3 text-muted-foreground shrink-0" />
+        <span className="text-[11px] font-medium truncate">{formatDisplayLabel()}</span>
+        {(startDate || endDate) && (
+          <button
+            onClick={(e) => {
+              e.stopPropagation();
+              onChange({ start: "", end: "" });
+            }}
+            className="text-muted-foreground hover:text-foreground ml-1"
+            title="Clear dates"
+          >
+            <X className="w-3 h-3" />
+          </button>
+        )}
+      </div>
+
+      {isOpen && (
+        <div className="fixed left-3 right-3 top-28 sm:absolute sm:inset-auto sm:left-0 sm:mt-1.5 z-50 bg-popover border border-border rounded-xl shadow-xl p-3 sm:w-64 space-y-3">
+          <div className="flex items-center justify-between px-1">
+            <span className="text-xs font-bold text-foreground">
+              {format(currentMonth, "MMMM yyyy")}
+            </span>
+            <div className="flex items-center gap-1">
+              <Button
+                variant="ghost"
+                size="icon"
+                onClick={() => setCurrentMonth(subMonths(currentMonth, 1))}
+                className="h-6 w-6 rounded p-0"
+              >
+                <ChevronLeft className="w-3.5 h-3.5" />
+              </Button>
+              <Button
+                variant="ghost"
+                size="icon"
+                onClick={() => setCurrentMonth(addMonths(currentMonth, 1))}
+                className="h-6 w-6 rounded p-0"
+              >
+                <ChevronRight className="w-3.5 h-3.5" />
+              </Button>
+            </div>
+          </div>
+
+          <div className="grid grid-cols-7 text-center text-[10px] font-semibold text-muted-foreground">
+            <span>Su</span><span>Mo</span><span>Tu</span><span>We</span><span>Th</span><span>Fr</span><span>Sa</span>
+          </div>
+
+          <div className="grid grid-cols-7 gap-y-1 text-center text-xs">
+            {Array.from({ length: startDayOfWeek }).map((_, index) => (
+              <div key={`empty-${index}`} />
+            ))}
+
+            {daysInMonth.map((day) => {
+              const isSelectedStart = start && isSameDay(day, start);
+              const isSelectedEnd = end && isSameDay(day, end);
+              const isInBetween = start && end && isWithinInterval(day, { start, end });
+
+              let btnStyle = "hover:bg-accent text-foreground";
+              if (isSelectedStart || isSelectedEnd) {
+                btnStyle = "bg-primary text-primary-foreground font-bold rounded-md";
+              } else if (isInBetween) {
+                btnStyle = "bg-primary/10 text-primary rounded-none";
+              }
+
+              return (
+                <button
+                  key={day.toISOString()}
+                  onClick={() => handleDayClick(day)}
+                  className={`h-7 w-full flex items-center justify-center text-[11px] transition-colors ${btnStyle}`}
+                >
+                  {format(day, "d")}
+                </button>
+              );
+            })}
+          </div>
+
+          <div className="flex items-center justify-between pt-2 border-t border-border/60">
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={() => {
+                onChange({ start: "", end: "" });
+                setIsOpen(false);
+              }}
+              className="h-6 px-2 text-[10px] text-muted-foreground"
+            >
+              Clear
+            </Button>
+            <Button
+              size="sm"
+              onClick={() => {
+                if (start && !end) {
+                  onChange({ start: format(start, "yyyy-MM-dd"), end: format(start, "yyyy-MM-dd") });
+                }
+                setIsOpen(false);
+              }}
+              className="h-6 px-3 text-[10px]"
+            >
+              Done
+            </Button>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
 
 export default function InvoiceList() {
   const { user } = useAuth();
@@ -51,8 +262,11 @@ export default function InvoiceList() {
   const [selectMode, setSelectMode] = useState(false);
   const [search, setSearch] = useState("");
   const [vendorFilter, setVendorFilter] = useState("all");
-  const [dateFrom, setDateFrom] = useState("");
-  const [dateTo, setDateTo] = useState("");
+  const [startDate, setStartDate] = useState("");
+  const [endDate, setEndDate] = useState("");
+
+  const [editingInvoice, setEditingInvoice] = useState(null);
+  const [singleSelectedAddons, setSingleSelectedAddons] = useState([]);
 
   const {
     data: invoices = [],
@@ -83,13 +297,12 @@ export default function InvoiceList() {
   const isLoadingData = hasLoaded && (loadingInvoices || loadingVendors);
   const isRefreshing = (fetchingInvoices || fetchingVendors) && !isLoadingData;
 
-  // Safety Timeout: Prevents permanent freeze if network/API hangs
   useEffect(() => {
     let timer;
     if (isLoadingData) {
       timer = setTimeout(() => {
         setLoadTimedOut(true);
-      }, 8000); // 8-second safety threshold
+      }, 8000);
     } else {
       setLoadTimedOut(false);
     }
@@ -117,8 +330,8 @@ export default function InvoiceList() {
   const filteredInvoices = useMemo(() => {
     if (!hasLoaded) return [];
     const q = search.trim().toLowerCase();
-    const fromTime = dateFrom ? new Date(dateFrom).setHours(0, 0, 0, 0) : null;
-    const toTime = dateTo ? new Date(dateTo).setHours(23, 59, 59, 999) : null;
+    const fromTime = startDate ? new Date(startDate).setHours(0, 0, 0, 0) : null;
+    const toTime = endDate ? new Date(endDate).setHours(23, 59, 59, 999) : null;
 
     return invoices.filter((inv) => {
       const nameMatch =
@@ -143,7 +356,7 @@ export default function InvoiceList() {
 
       return nameMatch && vendorMatch && dateMatch;
     });
-  }, [invoices, search, vendorFilter, dateFrom, dateTo, hasLoaded]);
+  }, [invoices, search, vendorFilter, startDate, endDate, hasLoaded]);
 
   const totalPages = Math.max(1, Math.ceil(filteredInvoices.length / pageSize));
   const paginatedInvoices = useMemo(() => {
@@ -164,6 +377,30 @@ export default function InvoiceList() {
     },
   });
 
+  const updateSingleAddonsMutation = useMutation({
+    mutationFn: async ({ id, addonsList }) => {
+      const inv = invoices.find((i) => i.id === id);
+      const price = inv?.product_price;
+      const acko = calculateAckoPlan(price);
+
+      const compiled = addonsList.map((addonId) => {
+        if (addonId === "acko_mobile" && acko) return acko;
+        return AVAILABLE_ADDONS.find((a) => a.id === addonId);
+      }).filter(Boolean);
+
+      return Invoice.update(id, { addons: compiled });
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["invoices", user?.id] });
+      queryClient.invalidateQueries({ queryKey: ["dashboard-invoices", user?.id] });
+      setEditingInvoice(null);
+      toast.success("Invoice add-ons updated successfully!");
+    },
+    onError: (err) => {
+      toast.error("Failed to update add-ons: " + err.message);
+    },
+  });
+
   const toggleSelect = (id, e) => {
     e.preventDefault();
     e.stopPropagation();
@@ -175,23 +412,60 @@ export default function InvoiceList() {
     });
   };
 
-  const toggleAll = () => {
-    if (selected.size === filteredInvoices.length) {
-      setSelected(new Set());
-    } else {
-      setSelected(new Set(filteredInvoices.map((i) => i.id)));
-    }
+  const togglePageSelectAll = () => {
+    const pageIds = paginatedInvoices.map((i) => i.id);
+    const allPageSelected = pageIds.length > 0 && pageIds.every((id) => selected.has(id));
+
+    setSelected((prev) => {
+      const next = new Set(prev);
+      if (allPageSelected) {
+        pageIds.forEach((id) => next.delete(id));
+      } else {
+        pageIds.forEach((id) => next.add(id));
+      }
+      return next;
+    });
+  };
+
+  const openSingleEdit = (inv, e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setEditingInvoice(inv);
+    const currentAddons = inv.addons && Array.isArray(inv.addons) ? inv.addons.map(a => a.id) : [];
+    setSingleSelectedAddons(currentAddons);
+  };
+
+  const toggleSingleAddon = (addonId) => {
+    setSingleSelectedAddons((prev) =>
+      prev.includes(addonId) ? prev.filter((id) => id !== addonId) : [...prev, addonId]
+    );
+  };
+
+  const handleSaveSingleAddons = () => {
+    if (!editingInvoice) return;
+    updateSingleAddonsMutation.mutate({
+      id: editingInvoice.id,
+      addonsList: singleSelectedAddons,
+    });
   };
 
   const clearFilters = () => {
     setSearch("");
     setVendorFilter("all");
-    setDateFrom("");
-    setDateTo("");
+    setStartDate("");
+    setEndDate("");
     setCurrentPage(1);
   };
 
-  const hasActiveFilters = search || vendorFilter !== "all" || dateFrom || dateTo;
+  const hasActiveFilters = search || vendorFilter !== "all" || startDate || endDate;
+  const pageIds = paginatedInvoices.map((i) => i.id);
+  const isAllPageSelected = pageIds.length > 0 && pageIds.every((id) => selected.has(id));
+
+  const dynamicAckoAmount = useMemo(() => {
+    if (!editingInvoice) return 999;
+    const plan = calculateAckoPlan(editingInvoice.product_price);
+    return plan ? plan.amount : 999;
+  }, [editingInvoice]);
 
   return (
     <div className="space-y-2.5 max-w-5xl mx-auto">
@@ -199,24 +473,10 @@ export default function InvoiceList() {
       <div className="flex items-center justify-between gap-2">
         <div className="leading-tight">
           <h1 className="text-base font-bold text-foreground">Invoices</h1>
-          <p className="text-[10px] text-muted-foreground">
-            {hasLoaded
-              ? `${filteredInvoices.length} of ${invoices.length} total bills`
-              : "On-demand ledger records"}
-          </p>
         </div>
 
         <div className="flex items-center gap-1 shrink-0">
-          {!hasLoaded ? (
-            <Button
-              size="sm"
-              onClick={handleInitialLoad}
-              className="h-7 px-2.5 text-[11px] gap-1.5 font-semibold rounded shadow-none"
-            >
-              <Database className="w-3 h-3" />
-              <span>Load Invoices</span>
-            </Button>
-          ) : (
+          {hasLoaded && (
             <>
               <Button
                 variant="ghost"
@@ -235,17 +495,15 @@ export default function InvoiceList() {
                     <Button
                       variant="outline"
                       size="sm"
-                      onClick={toggleAll}
+                      onClick={togglePageSelectAll}
                       className="h-6 px-2 text-[10px] gap-1 font-medium rounded"
                     >
-                      {selected.size === filteredInvoices.length ? (
+                      {isAllPageSelected ? (
                         <CheckSquare className="w-3 h-3 text-primary" />
                       ) : (
                         <Square className="w-3 h-3" />
                       )}
-                      <span>
-                        {selected.size === filteredInvoices.length ? "Deselect" : "Select All"}
-                      </span>
+                      <span>{isAllPageSelected ? "Deselect Page" : "Select Page"}</span>
                     </Button>
 
                     {selected.size > 0 && (
@@ -312,6 +570,89 @@ export default function InvoiceList() {
         </div>
       </div>
 
+      {/* Individual Add-on Edit Dialog */}
+      <Dialog open={!!editingInvoice} onOpenChange={(open) => !open && setEditingInvoice(null)}>
+        <DialogContent className="max-w-md p-4">
+          <DialogHeader>
+            <DialogTitle className="text-sm font-bold">Edit Invoice Add-ons</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-3 py-2">
+            <p className="text-[11px] text-muted-foreground">
+              Modify add-ons for customer <span className="font-bold text-foreground">{editingInvoice?.customer_name}</span> (Product Price: ₹{Number(editingInvoice?.product_price || 0).toLocaleString("en-IN")}):
+            </p>
+            <div className="space-y-2">
+              <div
+                onClick={() => toggleSingleAddon("acko_mobile")}
+                className={`p-2.5 rounded-md border flex items-center justify-between text-xs cursor-pointer transition-all ${
+                  singleSelectedAddons.includes("acko_mobile")
+                    ? 'bg-primary/10 border-primary/50 text-foreground font-medium'
+                    : 'bg-background border-border/80 text-muted-foreground hover:border-border'
+                }`}
+              >
+                <div className="flex items-center gap-2 min-w-0">
+                  <input
+                    type="checkbox"
+                    checked={singleSelectedAddons.includes("acko_mobile")}
+                    onChange={() => {}}
+                    className="rounded border-border accent-primary cursor-pointer"
+                  />
+                  <div className="truncate">
+                    <p className="font-semibold text-xs truncate">ACKO ADLD MOBILE INSURANCE</p>
+                    <p className="text-[10px] text-muted-foreground">Calculated per invoice price bracket</p>
+                  </div>
+                </div>
+                <span className="font-semibold text-xs shrink-0">₹{dynamicAckoAmount.toLocaleString("en-IN")}</span>
+              </div>
+
+              {AVAILABLE_ADDONS.map(addon => {
+                const isChecked = singleSelectedAddons.includes(addon.id);
+                return (
+                  <div
+                    key={addon.id}
+                    onClick={() => toggleSingleAddon(addon.id)}
+                    className={`p-2.5 rounded-md border flex items-center justify-between text-xs cursor-pointer transition-all ${
+                      isChecked
+                        ? 'bg-primary/10 border-primary/50 text-foreground font-medium'
+                        : 'bg-background border-border/80 text-muted-foreground hover:border-border'
+                    }`}
+                  >
+                    <div className="flex items-center gap-2 min-w-0">
+                      <input
+                        type="checkbox"
+                        checked={isChecked}
+                        onChange={() => {}}
+                        className="rounded border-border accent-primary cursor-pointer"
+                      />
+                      <span className="truncate text-xs">{addon.name}</span>
+                    </div>
+                    <span className="font-semibold text-xs shrink-0">₹{addon.amount.toLocaleString("en-IN")}</span>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+          <DialogFooter className="gap-2 pt-2">
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setEditingInvoice(null)}
+              className="h-8 text-xs px-3"
+            >
+              Cancel
+            </Button>
+            <Button
+              size="sm"
+              onClick={handleSaveSingleAddons}
+              disabled={updateSingleAddonsMutation.isPending}
+              className="h-8 text-xs px-4"
+            >
+              {updateSingleAddonsMutation.isPending && <Loader2 className="w-3.5 h-3.5 animate-spin mr-1.5" />}
+              Save Changes
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
       {/* Unloaded Fallback */}
       {!hasLoaded ? (
         <Card className="rounded-lg border-dashed border-border/80 bg-card shadow-none">
@@ -320,9 +661,8 @@ export default function InvoiceList() {
               <FileText className="w-4 h-4" />
             </div>
             <div className="space-y-0.5">
-              <p className="text-xs font-bold text-foreground">Invoice Archive Ready</p>
+              <p className="text-xs font-bold text-foreground">Invoice Archive</p>
               <p className="text-[10px] text-muted-foreground max-w-xs mx-auto leading-normal">
-                Click below to fetch the invoice ledger. Data is retained in memory with zero auto-refetching.
               </p>
             </div>
             <Button
@@ -409,24 +749,15 @@ export default function InvoiceList() {
               ))}
             </select>
 
-            <input
-              type="date"
-              value={dateFrom}
-              onChange={(e) => {
-                setDateFrom(e.target.value);
+            {/* Single Calendar Box Flow Range Picker */}
+            <FlowCalendarPicker
+              startDate={startDate}
+              endDate={endDate}
+              onChange={({ start, end }) => {
+                setStartDate(start);
+                setEndDate(end);
                 setCurrentPage(1);
               }}
-              className="h-7 rounded border border-border bg-card px-1.5 text-[10px] text-foreground outline-none focus:border-primary w-[110px]"
-            />
-
-            <input
-              type="date"
-              value={dateTo}
-              onChange={(e) => {
-                setDateTo(e.target.value);
-                setCurrentPage(1);
-              }}
-              className="h-7 rounded border border-border bg-card px-1.5 text-[10px] text-foreground outline-none focus:border-primary w-[110px]"
             />
 
             {hasActiveFilters && (
@@ -495,10 +826,9 @@ export default function InvoiceList() {
                             }
                             className="flex flex-1 items-center justify-between px-2.5 py-2 min-w-0"
                           >
-                            {/* Primary Details: Number, Customer, Mobile, Model, IMEI */}
                             <div className="min-w-0 pr-2 leading-tight space-y-0.5">
                               <div className="flex items-center gap-1.5 flex-wrap">
-                                <span className="font-bold text-xs text-foreground font-mono">
+                                <span className="font-bold text-[11px] text-foreground font-mono">
                                   {inv.invoice_number || "Draft"}
                                 </span>
                                 <span className="text-[11px] font-medium text-foreground truncate">
@@ -511,7 +841,6 @@ export default function InvoiceList() {
                                 )}
                               </div>
 
-                              {/* Asset Model */}
                               {inv.product_model && (
                                 <div className="flex items-center gap-1 text-[11px] text-foreground font-medium truncate">
                                   <Smartphone className="w-3 h-3 text-primary shrink-0" />
@@ -519,16 +848,6 @@ export default function InvoiceList() {
                                 </div>
                               )}
 
-                              {/* Asset IMEI (Stacked below Model) */}
-                              {inv.imei_serial && (
-                                <div className="flex items-center">
-                                  <span className="font-mono text-[9px] text-primary font-semibold bg-primary/10 px-1 py-0.5 rounded truncate max-w-full">
-                                    IMEI: {inv.imei_serial}
-                                  </span>
-                                </div>
-                              )}
-
-                              {/* Vendor / DO identifiers */}
                               <div className="text-[9px] text-muted-foreground truncate flex items-center gap-1 pt-0.5">
                                 <span className="truncate">
                                   {vendorMap[inv.vendor_id] || "Vendor"}
@@ -541,14 +860,25 @@ export default function InvoiceList() {
                               </div>
                             </div>
 
-                            {/* Financial Total & Date */}
-                            <div className="flex items-center gap-1.5 shrink-0 text-right leading-tight">
+                            <div className="flex items-center gap-2 shrink-0 text-right leading-tight">
                               <div>
                                 <p className="font-black text-xs text-foreground tracking-tight font-mono">
                                   ₹{Number(inv.grand_total || 0).toLocaleString("en-IN")}
                                 </p>
                                 <p className="text-[9px] text-muted-foreground font-medium font-mono">{dateStr}</p>
                               </div>
+                              
+                              <Button
+                                variant="outline"
+                                size="sm"
+                                onClick={(e) => openSingleEdit(inv, e)}
+                                className="h-6 px-1.5 text-[9px] gap-1 font-medium rounded"
+                                title="Edit Add-ons"
+                              >
+                                <Edit3 className="w-3 h-3 text-primary" />
+                                <span className="hidden sm:inline">Add-ons</span>
+                              </Button>
+
                               {!selectMode && (
                                 <ChevronRight className="w-3.5 h-3.5 text-muted-foreground/50" />
                               )}

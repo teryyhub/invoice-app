@@ -1,10 +1,14 @@
-import { createContext, useContext, useEffect, useState, useRef } from "react";
+// src/lib/AuthContext.jsx
+import { createContext, useContext, useEffect, useState, useRef, useCallback } from "react";
 import { supabase } from "@/api/supabaseClient";
 import { queryClientInstance } from "@/lib/query-client";
 import { Capacitor } from "@capacitor/core";
-import { App } from "@capacitor/app";
+import { GoogleSignIn } from "@capawesome/capacitor-google-sign-in";
 
 const AuthContext = createContext(null);
+
+// Google Cloud Console WEB Client ID (same one in Supabase Google Provider)
+const GOOGLE_WEB_CLIENT_ID = "54020713640-1an1acs3hpnl79747u0uldu7m2f0aq4m.apps.googleusercontent.com";
 
 async function hashPin(pin) {
   const encoder = new TextEncoder();
@@ -37,11 +41,11 @@ export function AuthProvider({ children }) {
   const [tfaRequired, setTfaRequired] = useState(false);
   const tfaProfileRef = useRef(null);
 
-  const loadTfaProfile = async (userId) => {
-    if (!userId) { 
-      setTfaProfile(null); 
-      tfaProfileRef.current = null; 
-      return null; 
+  const loadTfaProfile = useCallback(async (userId) => {
+    if (!userId) {
+      setTfaProfile(null);
+      tfaProfileRef.current = null;
+      return null;
     }
     try {
       const result = await withTimeout(
@@ -56,63 +60,58 @@ export function AuthProvider({ children }) {
       const { data, error } = result;
       if (error) {
         console.warn("loadTfaProfile:", error.message);
-        setTfaProfile(null); 
-        tfaProfileRef.current = null; 
+        setTfaProfile(null);
+        tfaProfileRef.current = null;
         return null;
       }
-      setTfaProfile(data); 
-      tfaProfileRef.current = data; 
+      setTfaProfile(data);
+      tfaProfileRef.current = data;
       return data;
     } catch (e) {
       console.warn("loadTfaProfile exception:", e);
-      setTfaProfile(null); 
-      tfaProfileRef.current = null; 
+      setTfaProfile(null);
+      tfaProfileRef.current = null;
       return null;
     }
-  };
+  }, []);
 
-  const checkTfaRequirement = async (userId) => {
-    try {
-      const profile = await loadTfaProfile(userId);
-      if (!profile?.tfa_enabled) { setTfaRequired(false); return false; }
-      if (!profile.last_tfa_verified) { setTfaRequired(true); return true; }
-      const days = (Date.now() - new Date(profile.last_tfa_verified).getTime()) / 86400000;
-      const needed = days > 7;
-      setTfaRequired(needed);
-      return needed;
-    } catch (e) {
-      console.warn("checkTfaRequirement:", e);
-      setTfaRequired(false); 
-      return false;
-    }
-  };
+  const checkTfaRequirement = useCallback(
+    async (userId) => {
+      try {
+        const profile = await loadTfaProfile(userId);
+        if (!profile?.tfa_enabled) {
+          setTfaRequired(false);
+          return false;
+        }
+        if (!profile.last_tfa_verified) {
+          setTfaRequired(true);
+          return true;
+        }
+        const days = (Date.now() - new Date(profile.last_tfa_verified).getTime()) / 86400000;
+        const needed = days > 7;
+        setTfaRequired(needed);
+        return needed;
+      } catch (e) {
+        console.warn("checkTfaRequirement:", e);
+        setTfaRequired(false);
+        return false;
+      }
+    },
+    [loadTfaProfile]
+  );
 
   useEffect(() => {
     let isMounted = true;
 
-    const handleDeepLink = (urlStr) => {
-      try {
-        const url = new URL(urlStr);
-        const path = url.pathname + url.search + url.hash;
-        if (path && path !== "/") {
-          window.location.href = path;
-        }
-      } catch (e) {
-        console.error("Deep link error:", e);
-      }
-    };
-
     if (Capacitor.isNativePlatform()) {
-      App.addListener("appUrlOpen", (event) => {
-        handleDeepLink(event.url);
-      });
-
-      App.getLaunchUrl().then((launchUrl) => {
-        if (launchUrl?.url) handleDeepLink(launchUrl.url);
+      GoogleSignIn.initialize({
+        clientId: GOOGLE_WEB_CLIENT_ID,
+        scopes: ["profile", "email"],
+      }).catch((err) => {
+        console.error("GoogleSignIn.initialize failed:", err);
       });
     }
 
-    // Safely initialize session with timeout fallback and invalid refresh token cleanup
     async function initAuth() {
       try {
         const result = await withTimeout(
@@ -123,7 +122,6 @@ export function AuthProvider({ children }) {
 
         if (!isMounted) return;
 
-        // If the session has an invalid refresh token or error, clean it up gracefully
         if (result.error) {
           console.warn("Session retrieval warning:", result.error.message);
           await supabase.auth.signOut().catch(() => {});
@@ -143,150 +141,185 @@ export function AuthProvider({ children }) {
         setUser(null);
       } finally {
         if (isMounted) {
-          setLoading(false); // Guarantees loading state clears out
+          setLoading(false);
         }
       }
     }
 
     initAuth();
 
-    const { data: { subscription } } = supabase.auth.onAuthStateChange(
-      async (event, session) => {
-        // Prevent unnecessary state thrashing from concurrent background tab refreshes
-        if (event === "TOKEN_REFRESHED") return;
+    const {
+      data: { subscription },
+    } = supabase.auth.onAuthStateChange(async (event, session) => {
+      if (event === "TOKEN_REFRESHED") return;
+      if (!isMounted) return;
 
-        if (!isMounted) return;
+      const currentUser = session?.user ?? null;
+      setUser(currentUser);
+      setLoading(false);
 
-        const currentUser = session?.user ?? null;
-        setUser(currentUser);
+      if (event === "PASSWORD_RECOVERY") return;
 
-        if (event === "PASSWORD_RECOVERY") return;
-
-        if (event === "SIGNED_IN" && currentUser) {
-          if (!isRecoveryFlow()) {
-            await checkTfaRequirement(currentUser.id);
-          }
-        }
-
-        if (event === "SIGNED_OUT") {
-          queryClientInstance.clear();
-          setTfaProfile(null);
-          setTfaRequired(false);
+      if (event === "SIGNED_IN" && currentUser) {
+        if (!isRecoveryFlow()) {
+          await checkTfaRequirement(currentUser.id);
         }
       }
-    );
+
+      if (event === "SIGNED_OUT") {
+        queryClientInstance.clear();
+        setTfaProfile(null);
+        tfaProfileRef.current = null;
+        setTfaRequired(false);
+      }
+    });
 
     return () => {
       isMounted = false;
-      subscription.unsubscribe();
+      subscription?.unsubscribe();
     };
-  }, []);
+  }, [checkTfaRequirement]);
 
-  const signIn = (email, password) =>
-    supabase.auth.signInWithPassword({ email, password });
+  const signIn = useCallback(
+    (email, password) => supabase.auth.signInWithPassword({ email, password }),
+    []
+  );
 
-  const signUp = (email, password) => {
+  const signUp = useCallback((email, password) => {
     const origin = Capacitor.isNativePlatform()
-      ? "com.sivcholainv.app://localhost"
+      ? "com.cminvoice.app://localhost"
       : window.location.origin;
     return supabase.auth.signUp({
       email,
       password,
-      options: { redirectTo: `${origin}/` }
+      options: { emailRedirectTo: `${origin}/dashboard` },
     });
-  };
+  }, []);
 
-  const signOut = async () => {
-    try { 
-      await supabase.auth.signOut(); 
-      queryClientInstance.clear(); 
-    } catch (e) { 
-      console.error("signOut error:", e); 
+  const signInWithGoogle = useCallback(async () => {
+    if (Capacitor.isNativePlatform()) {
+      const googleResult = await GoogleSignIn.signIn();
+      const idToken = googleResult?.idToken;
+      if (!idToken) {
+        throw new Error("Google sign-in did not return an ID token.");
+      }
+
+      const { data, error } = await supabase.auth.signInWithIdToken({
+        provider: "google",
+        token: idToken,
+      });
+      if (error) throw error;
+      if (data?.user) setUser(data.user);
+      return data;
     }
-  };
-
-  const signInWithGoogle = async () => {
-    const redirectTo = Capacitor.isNativePlatform()
-      ? "com.sivcholainv.app://localhost"
-      : window.location.origin;
 
     const { data, error } = await supabase.auth.signInWithOAuth({
       provider: "google",
-      options: { redirectTo },
+      options: {
+        redirectTo: `${window.location.origin}/dashboard`,
+      },
     });
     if (error) throw error;
     return data;
-  };
+  }, []);
 
-  const verifyOtp = async (email, token) => {
-    const { data, error } = await supabase.auth.verifyOTP({ email, token, type: "signup" });
+  const signOut = useCallback(async () => {
+    if (Capacitor.isNativePlatform()) {
+      try {
+        await GoogleSignIn.signOut();
+      } catch {}
+    }
+    try {
+      await supabase.auth.signOut();
+      queryClientInstance.clear();
+      setUser(null);
+      setTfaProfile(null);
+      tfaProfileRef.current = null;
+      setTfaRequired(false);
+    } catch (e) {
+      console.error("signOut error:", e);
+    }
+  }, []);
+
+  const verifyOtp = useCallback(async (email, token) => {
+    const { data, error } = await supabase.auth.verifyOtp({
+      email,
+      token,
+      type: "signup",
+    });
     if (error) throw error;
     return data;
-  };
+  }, []);
 
-  const requestPasswordReset = async (email) => {
+  const requestPasswordReset = useCallback(async (email) => {
     const origin = Capacitor.isNativePlatform()
-      ? "com.sivcholainv.app://localhost"
+      ? "com.cminvoice.app://localhost"
       : window.location.origin;
     const { error } = await supabase.auth.resetPasswordForEmail(email, {
       redirectTo: `${origin}/reset-password`,
     });
     if (error) throw error;
     return true;
-  };
+  }, []);
 
-  const setupTfaPin = async (pin) => {
-    const hash = await hashPin(pin);
-    const { error } = await supabase
-      .from("profiles")
-      .update({
-        tfa_enabled: true,
-        pin_hash: hash,
-        last_tfa_verified: null,
-        failed_tfa_attempts: 0,
-        pin_locked_until: null,
-      })
-      .eq("id", user.id);
-    if (error) throw new Error(error.message);
-    await loadTfaProfile(user.id);
-    setTfaRequired(false);
-  };
-
-  const verifyTfaPin = async (pin) => {
-    const profile = tfaProfileRef.current;
-    if (profile?.pin_locked_until) {
-      const lockedUntil = new Date(profile.pin_locked_until);
-      if (Date.now() < lockedUntil.getTime()) {
-        const mins = Math.ceil((lockedUntil - Date.now()) / 60000);
-        throw new Error(`PIN locked. Try again in ${mins} minute${mins > 1 ? "s" : ""}.`);
-      }
-    }
-    const { data, error } = await supabase
-      .from("profiles")
-      .select("pin_hash")
-      .eq("id", user.id)
-      .single();
-    if (error || !data?.pin_hash) throw new Error("PIN not set up.");
-    const inputHash = await hashPin(pin);
-    if (inputHash !== data.pin_hash) {
-      await supabase.rpc("increment_tfa_failures", { user_id: user.id });
+  const setupTfaPin = useCallback(
+    async (pin) => {
+      const hash = await hashPin(pin);
+      const { error } = await supabase
+        .from("profiles")
+        .update({
+          tfa_enabled: true,
+          pin_hash: hash,
+          last_tfa_verified: null,
+          failed_tfa_attempts: 0,
+          pin_locked_until: null,
+        })
+        .eq("id", user.id);
+      if (error) throw new Error(error.message);
       await loadTfaProfile(user.id);
-      throw new Error("Incorrect PIN. Please try again.");
-    }
-    await supabase
-      .from("profiles")
-      .update({
-        last_tfa_verified: new Date().toISOString(),
-        failed_tfa_attempts: 0,
-        pin_locked_until: null,
-      })
-      .eq("id", user.id);
-    await loadTfaProfile(user.id);
-    setTfaRequired(false);
-    return { success: true };
-  };
+      setTfaRequired(false);
+    },
+    [user, loadTfaProfile]
+  );
 
-  const disableTfa = async () => {
+  const verifyTfaPin = useCallback(
+    async (pin) => {
+      const profile = tfaProfileRef.current;
+      if (profile?.pin_locked_until) {
+        const lockedUntil = new Date(profile.pin_locked_until);
+        if (Date.now() < lockedUntil.getTime()) {
+          const mins = Math.ceil((lockedUntil - Date.now()) / 60000);
+          throw new Error(`PIN locked. Try again in ${mins} minute${mins > 1 ? "s" : ""}.`);
+        }
+      }
+      const { data, error } = await supabase
+        .from("profiles")
+        .select("pin_hash")
+        .eq("id", user.id)
+        .single();
+      if (error || !data?.pin_hash) throw new Error("PIN not set up.");
+      const inputHash = await hashPin(pin);
+      if (inputHash !== data.pin_hash) {
+        await supabase.rpc("increment_tfa_failures", { user_id: user.id });
+        await loadTfaProfile(user.id);
+        throw new Error("Incorrect PIN. Please try again.");
+      }
+      await supabase
+        .from("profiles")
+        .update({
+          last_tfa_verified: new Date().toISOString(),
+          failed_tfa_attempts: 0,
+          pin_locked_until: null,
+        })
+        .eq("id", user.id);
+      await loadTfaProfile(user.id);
+      setTfaRequired(false);
+      return { success: true };
+    },
+    [user, loadTfaProfile]
+  );
+
+  const disableTfa = useCallback(async () => {
     const { error } = await supabase
       .from("profiles")
       .update({
@@ -300,27 +333,27 @@ export function AuthProvider({ children }) {
     if (error) throw new Error(error.message);
     await loadTfaProfile(user.id);
     setTfaRequired(false);
-  };
+  }, [user, loadTfaProfile]);
 
   return (
     <AuthContext.Provider
       value={{
-        user, 
-        loading, 
+        user,
+        loading,
         isLoadingAuth: loading,
-        tfaProfile, 
-        tfaRequired, 
+        tfaProfile,
+        tfaRequired,
         setTfaRequired,
-        signIn, 
-        signUp, 
-        signOut, 
-        signInWithGoogle, 
+        signIn,
+        signUp,
+        signOut,
+        signInWithGoogle,
         verifyOtp,
-        requestPasswordReset, 
-        setupTfaPin, 
-        verifyTfaPin, 
+        requestPasswordReset,
+        setupTfaPin,
+        verifyTfaPin,
         disableTfa,
-        checkTfaRequirement, 
+        checkTfaRequirement,
         loadTfaProfile,
       }}
     >
@@ -329,4 +362,10 @@ export function AuthProvider({ children }) {
   );
 }
 
-export const useAuth = () => useContext(AuthContext);
+export function useAuth() {
+  const context = useContext(AuthContext);
+  if (!context) {
+    throw new Error("useAuth must be used within an AuthProvider");
+  }
+  return context;
+}

@@ -1,18 +1,103 @@
 // src/pages/EmiCalculator.jsx
-import React, { useState, useMemo, useRef, useEffect } from "react";
-import { Calculator, Share2, Info, Calendar, Percent, Settings, X, CreditCard, AlertCircle, Printer, Sliders, CheckCircle, ShieldAlert, Download, Palette, FileText, ArrowLeft } from "lucide-react";
-import { useNavigate } from "react-router-dom";
+import React, { useState, useMemo, useRef, useEffect, useCallback } from "react";
+import { Calculator, Settings, X, AlertCircle, Printer, ShieldAlert, Download, Palette, FileText, ArrowLeft, Check, Edit3, Maximize2 } from "lucide-react";
+import { useNavigate, useLocation } from "react-router-dom";
+import html2canvas from "html2canvas";
+import jspdf from "jspdf";
+import { Capacitor } from "@capacitor/core";
+import { Filesystem, Directory } from "@capacitor/filesystem";
+import { toast } from "sonner";
+
+const AVAILABLE_ADDONS = [
+  { id: "one_assist", name: "ONE ASSIST HOME ASSURE", amount: 1099 },
+  { id: "anmol_xpress", name: "ANMOL XPRESS HEALTH", amount: 799 },
+  { id: "hdfc_suraksha", name: "HDFC LIFE JEEVAN SURAKSHA", amount: 745 },
+];
+
+const A4_WIDTH = 794;
+const A4_HEIGHT = 1122;
+const MIN_ZOOM = 0.5;
+const MAX_ZOOM = 3;
+
+function calculateAckoPlan(price) {
+  const p = parseFloat(price) || 0;
+  if (p >= 10000 && p <= 15000) return { id: "acko_mobile", name: "ACKO ADLD MOBILE INSURANCE", amount: 999 };
+  if (p > 15000 && p <= 20000) return { id: "acko_mobile", name: "ACKO ADLD MOBILE INSURANCE", amount: 1399 };
+  if (p > 20000 && p <= 25000) return { id: "acko_mobile", name: "ACKO ADLD MOBILE INSURANCE", amount: 1799 };
+  if (p > 25000 && p <= 30000) return { id: "acko_mobile", name: "ACKO ADLD MOBILE INSURANCE", amount: 2199 };
+  if (p > 30000 && p <= 35000) return { id: "acko_mobile", name: "ACKO ADLD MOBILE INSURANCE", amount: 2499 };
+  if (p > 35000 && p <= 50000) return { id: "acko_mobile", name: "ACKO ADLD MOBILE INSURANCE", amount: 3299 };
+  if (p > 50000 && p <= 70000) return { id: "acko_mobile", name: "ACKO ADLD MOBILE INSURANCE", amount: 4699 };
+  if (p > 70000 && p <= 100000) return { id: "acko_mobile", name: "ACKO ADLD MOBILE INSURANCE", amount: 6599 };
+  if (p > 100000 && p <= 120000) return { id: "acko_mobile", name: "ACKO ADLD MOBILE INSURANCE", amount: 8499 };
+  if (p > 120000 && p <= 140000) return { id: "acko_mobile", name: "ACKO ADLD MOBILE INSURANCE", amount: 9999 };
+  if (p > 140000 && p <= 160000) return { id: "acko_mobile", name: "ACKO ADLD MOBILE INSURANCE", amount: 11599 };
+  if (p > 160000 && p <= 180000) return { id: "acko_mobile", name: "ACKO ADLD MOBILE INSURANCE", amount: 13099 };
+  if (p > 180000 && p <= 200000) return { id: "acko_mobile", name: "ACKO ADLD MOBILE INSURANCE", amount: 14599 };
+  return null;
+}
+
+function getTouchDistance(t1, t2) {
+  const dx = t1.clientX - t2.clientX;
+  const dy = t1.clientY - t2.clientY;
+  return Math.hypot(dx, dy);
+}
+
+async function saveToDownloadsFolder(fileName, base64Data) {
+  try {
+    if (Capacitor.getPlatform() === "android") {
+      const perm = await Filesystem.requestPermissions();
+      if (perm.publicStorage !== "granted") {
+        toast.error("Storage permission is required to save to Download/CM Invoice/.", {
+          duration: 8000,
+        });
+        return;
+      }
+    }
+
+    const relativePath = `Download/CM Invoice/${fileName}`;
+    await Filesystem.writeFile({
+      path: relativePath,
+      data: base64Data,
+      directory: Directory.ExternalStorage,
+      recursive: true,
+    });
+
+    toast.success(`Saved to ${relativePath}`, { duration: 5000 });
+  } catch (err) {
+    const msg = String(err?.message || err);
+    toast.error("Save failed: " + msg, { duration: 10000 });
+    throw err;
+  }
+}
 
 export default function EmiCalculator() {
   const navigate = useNavigate();
-  const [emi, setEmi] = useState(() => localStorage.getItem("chola_calc_emi") || "");
-  const [tenureMonths, setTenureMonths] = useState(() => localStorage.getItem("chola_calc_tenure") || "");
-  const [loanNo, setLoanNo] = useState(() => localStorage.getItem("chola_calc_loanno") || "");
-  
-  // DO Date defaults to today in YYYY-MM-DD format
+  const location = useLocation();
+  const passedState = location.state || {};
+
+  const [netLoanAmount, setNetLoanAmount] = useState(() => {
+    if (passedState.loanAmount !== undefined && passedState.loanAmount !== "") return String(passedState.loanAmount);
+    if (passedState.totalPrincipal !== undefined && passedState.totalPrincipal !== "") {
+      const addons = Number(passedState.addonsAmount) || 0;
+      return String(Number(passedState.totalPrincipal) - addons);
+    }
+    return "";
+  });
+
+  const [productCost, setProductCost] = useState(() => {
+    if (passedState.productCost !== undefined && passedState.productCost !== "") return String(passedState.productCost);
+    if (passedState.product_price !== undefined && passedState.product_price !== "") return String(passedState.product_price);
+    if (passedState.product_cost !== undefined && passedState.product_cost !== "") return String(passedState.product_cost);
+    if (passedState.mrp !== undefined && passedState.mrp !== "") return String(passedState.mrp);
+    return "";
+  });
+
+  const [tenureMonths, setTenureMonths] = useState(() => passedState.tenure !== undefined && passedState.tenure !== "" ? String(passedState.tenure) : "");
+  const [loanNo, setLoanNo] = useState(() => passedState.loanNumber !== undefined && passedState.loanNumber !== "" ? String(passedState.loanNumber) : "");
+
   const [doDate, setDoDate] = useState(() => {
-    const saved = localStorage.getItem("chola_calc_dodate");
-    if (saved) return saved;
+    if (passedState.doDate) return passedState.doDate;
     const today = new Date();
     const year = today.getFullYear();
     const month = String(today.getMonth() + 1).padStart(2, '0');
@@ -20,38 +105,59 @@ export default function EmiCalculator() {
     return `${year}-${month}-${day}`;
   });
 
-  const [isDeviceInsurance, setIsDeviceInsurance] = useState(() => localStorage.getItem("chola_calc_insurance") === "true");
-  const [isColorTheme, setIsColorTheme] = useState(() => localStorage.getItem("chola_calc_colortheme") !== "false");
-  const [isGenerated, setIsGenerated] = useState(false);
-  const [isOptionsOpen, setIsOptionsOpen] = useState(false);
+  const [selectedAddons, setSelectedAddons] = useState(() => {
+    if (passedState.selectedAddons && Array.isArray(passedState.selectedAddons)) {
+      return passedState.selectedAddons.map(a => typeof a === 'object' ? (a.id || a.name) : a);
+    }
+    if (passedState.addons && Array.isArray(passedState.addons)) {
+      return passedState.addons.map(a => typeof a === 'object' ? (a.id || a.name) : a);
+    }
+    const initial = [];
+    if (passedState.hasAcko) initial.push("acko_mobile");
+    return initial;
+  });
+
+  const [isColorTheme, setIsColorTheme] = useState(false);
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
-  const [defaultDay, setDefaultDay] = useState(() => localStorage.getItem("chola_calc_defaultday") || "5");
+  const [defaultDay, setDefaultDay] = useState("5");
   const [isDownloading, setIsDownloading] = useState(false);
   const [isPdfDownloading, setIsPdfDownloading] = useState(false);
-  
+
+  const [isGenerated, setIsGenerated] = useState(false);
+
   const scheduleRef = useRef(null);
   const containerRef = useRef(null);
-  const [scale, setScale] = useState(1);
+  const pinchStateRef = useRef({
+    active: false,
+    startDist: 0,
+    startZoom: 1,
+  });
 
-  // Save parameters to localStorage when they change
-  useEffect(() => {
-    localStorage.setItem("chola_calc_emi", emi);
-    localStorage.setItem("chola_calc_tenure", tenureMonths);
-    localStorage.setItem("chola_calc_loanno", loanNo);
-    localStorage.setItem("chola_calc_dodate", doDate);
-    localStorage.setItem("chola_calc_insurance", isDeviceInsurance);
-    localStorage.setItem("chola_calc_colortheme", isColorTheme);
-    localStorage.setItem("chola_calc_defaultday", defaultDay);
-  }, [emi, tenureMonths, loanNo, doDate, isDeviceInsurance, isColorTheme, defaultDay]);
+  const [fitScale, setFitScale] = useState(1);
+  const [userZoom, setUserZoom] = useState(1);
+  const [isPinching, setIsPinching] = useState(false);
 
-  // Automatically calculate First EMI Date based on DO Date rule
+  const effectiveScale = useMemo(() => {
+    const combined = fitScale * userZoom;
+    return Math.min(MAX_ZOOM, Math.max(0.2, Number(combined.toFixed(4))));
+  }, [fitScale, userZoom]);
+
+  const calculatedAcko = calculateAckoPlan(productCost !== "" ? productCost : netLoanAmount);
+  const isDeviceInsurance = selectedAddons.includes("acko_mobile");
+
+  const toggleAddon = (addonId) => {
+    setSelectedAddons(prev =>
+      prev.includes(addonId) ? prev.filter(id => id !== addonId) : [...prev, addonId]
+    );
+  };
+
   const firstEmiDate = useMemo(() => {
     if (!doDate) return "";
     const parts = doDate.split("-");
     if (parts.length !== 3) return doDate;
 
     const year = parseInt(parts[0], 10);
-    const month = parseInt(parts[1], 10) - 1; // 0-indexed month
+    const month = parseInt(parts[1], 10) - 1;
     const day = parseInt(parts[2], 10);
 
     const d = new Date(year, month, day);
@@ -75,23 +181,74 @@ export default function EmiCalculator() {
     return `${yyyy}-${mm}-${dd}`;
   }, [doDate, defaultDay]);
 
-  // Auto-fit screen calculation for the preview modal
+  const computeAutoFit = useCallback(() => {
+    const el = containerRef.current;
+    if (!el) return;
+    const rect = el.getBoundingClientRect();
+    const availableWidth = (rect.width || el.clientWidth || window.innerWidth) - 24;
+    if (availableWidth > 0) {
+      setFitScale(Math.min(1, availableWidth / A4_WIDTH));
+    }
+  }, []);
+
   useEffect(() => {
-    const handleResize = () => {
-      if (containerRef.current) {
-        const parentWidth = containerRef.current.offsetWidth - 32;
-        const a4Width = 794;
-        if (parentWidth < a4Width) {
-          setScale(parentWidth / a4Width);
-        } else {
-          setScale(1);
-        }
-      }
+    if (!isGenerated) return;
+    computeAutoFit();
+    const raf = requestAnimationFrame(computeAutoFit);
+    const timer = setTimeout(computeAutoFit, 80);
+    window.addEventListener("resize", computeAutoFit, { passive: true });
+    return () => {
+      cancelAnimationFrame(raf);
+      clearTimeout(timer);
+      window.removeEventListener("resize", computeAutoFit);
     };
-    handleResize();
-    window.addEventListener("resize", handleResize);
-    return () => window.removeEventListener("resize", handleResize);
-  }, [isGenerated]);
+  }, [isGenerated, computeAutoFit]);
+
+  const handleResetFit = () => {
+    setUserZoom(1);
+    computeAutoFit();
+  };
+
+  const handleTouchStart = (e) => {
+    if (e.touches.length === 2) {
+      const dist = getTouchDistance(e.touches[0], e.touches[1]);
+      if (dist > 0) {
+        pinchStateRef.current = {
+          active: true,
+          startDist: dist,
+          startZoom: userZoom,
+        };
+        setIsPinching(true);
+      }
+    }
+  };
+
+  const handleTouchMove = (e) => {
+    if (pinchStateRef.current.active && e.touches.length === 2) {
+      e.preventDefault();
+      const currentDist = getTouchDistance(e.touches[0], e.touches[1]);
+      if (currentDist > 0 && pinchStateRef.current.startDist > 0) {
+        const ratio = currentDist / pinchStateRef.current.startDist;
+        const nextZoom = Math.min(MAX_ZOOM, Math.max(MIN_ZOOM, pinchStateRef.current.startZoom * ratio));
+        setUserZoom(Number(nextZoom.toFixed(3)));
+      }
+    }
+  };
+
+  const handleTouchEnd = (e) => {
+    if (e.touches.length < 2) {
+      pinchStateRef.current.active = false;
+      setIsPinching(false);
+    }
+  };
+
+  const handleWheel = (e) => {
+    if (e.ctrlKey || e.metaKey) {
+      e.preventDefault();
+      const delta = e.deltaY < 0 ? 0.12 : -0.12;
+      setUserZoom((z) => Math.min(MAX_ZOOM, Math.max(MIN_ZOOM, Number((z + delta).toFixed(3)))));
+    }
+  };
 
   const handleSaveSettings = () => {
     setIsSettingsOpen(false);
@@ -106,96 +263,129 @@ export default function EmiCalculator() {
     }
     const d = new Date(dateStr);
     if (isNaN(d.getTime())) return dateStr;
-    const dd = String(d.getDate()).padStart(2, "0");
-    const mm = String(d.getMonth() + 1).padStart(2, "0");
+    const dd = String(d.getDate()).padStart(2, '0');
+    const mm = String(d.getMonth() + 1).padStart(2, '0');
     const yyyy = d.getFullYear();
     return `${dd}/${mm}/${yyyy}`;
   };
 
-  const { principal, totalPayment, schedule } = useMemo(() => {
-    const E = Number(emi) || 0;
+  const { principal, totalPayment, regularEmiDisplay, schedule } = useMemo(() => {
+    const loan = Number(netLoanAmount) || 0;
     const n = Math.min(24, Math.max(0, Number(tenureMonths) || 0));
 
-    if (E <= 0 || n <= 0) {
-      return { principal: 0, totalPayment: 0, schedule: [] };
+    const selectedAddonsList = selectedAddons.map(id => {
+      if (id === "acko_mobile" && calculatedAcko) return calculatedAcko;
+      return AVAILABLE_ADDONS.find(a => a.id === id || a.name === id);
+    }).filter(Boolean);
+
+    const totalAddons = selectedAddonsList.reduce((sum, item) => sum + (Number(item?.amount) || 0), 0);
+    const baseTotalPrincipal = loan + totalAddons;
+
+    if (baseTotalPrincipal <= 0 || n <= 0) {
+      return { principal: 0, totalPayment: 0, regularEmiDisplay: 0, schedule: [] };
     }
 
-    const initialPrincipal = E * n;
-    const tPayment = E * n;
-
-    let currentPrincipal = initialPrincipal;
+    let currentPrincipal = baseTotalPrincipal;
     const rows = [];
-    
+
     let baseDate = new Date(firstEmiDate || Date.now());
     if (isNaN(baseDate.getTime())) {
       baseDate = new Date();
     }
 
+    const exactEmi = baseTotalPrincipal / n;
+    const regularEmi = Math.ceil(exactEmi);
+
+    let accumulatedPayments = 0;
+
     for (let month = 1; month <= n; month++) {
       const installmentDate = new Date(baseDate.getFullYear(), baseDate.getMonth() + (month - 1), baseDate.getDate());
       const principalForMonth = currentPrincipal;
-      currentPrincipal = Math.max(0, currentPrincipal - E);
+
+      let monthAmount = regularEmi;
+      if (month === n) {
+        monthAmount = Math.max(0, Number((baseTotalPrincipal - accumulatedPayments).toFixed(2)));
+      }
+
+      accumulatedPayments += monthAmount;
+      currentPrincipal = Math.max(0, currentPrincipal - monthAmount);
 
       rows.push({
         installment: month,
-        dueDate: !isNaN(installmentDate.getTime()) 
-          ? installmentDate.toLocaleDateString('en-GB', { day: '2-digit', month: '2-digit', year: 'numeric' }) 
+        dueDate: !isNaN(installmentDate.getTime())
+          ? installmentDate.toLocaleDateString('en-GB', { day: '2-digit', month: '2-digit', year: 'numeric' })
           : "—",
         principal: principalForMonth,
-        amount: E,
+        amount: monthAmount,
       });
 
       if (currentPrincipal <= 0 && month < n) break;
     }
 
     return {
-      principal: Math.round(initialPrincipal),
-      totalPayment: Math.round(tPayment),
+      principal: Math.round(baseTotalPrincipal),
+      totalPayment: Math.round(accumulatedPayments),
+      regularEmiDisplay: regularEmi,
       schedule: rows,
     };
-  }, [emi, tenureMonths, firstEmiDate]);
+  }, [netLoanAmount, tenureMonths, selectedAddons, calculatedAcko, firstEmiDate]);
 
   const handlePrint = () => {
     window.print();
+  };
+
+  const captureScheduleCanvas = async () => {
+    const el = scheduleRef.current;
+    if (!el) return null;
+
+    const prevTransform = el.style.transform;
+    const prevLeft = el.style.left;
+    const prevPosition = el.style.position;
+
+    el.style.position = "relative";
+    el.style.left = "0px";
+    el.style.transform = "scale(1)";
+
+    try {
+      return await html2canvas(el, {
+        scale: 2,
+        useCORS: true,
+        allowTaint: true,
+        backgroundColor: "#ffffff",
+        width: A4_WIDTH,
+        height: A4_HEIGHT,
+        windowWidth: A4_WIDTH,
+        windowHeight: A4_HEIGHT,
+      });
+    } finally {
+      el.style.position = prevPosition;
+      el.style.left = prevLeft;
+      el.style.transform = prevTransform;
+    }
   };
 
   const handleDownloadJpg = async () => {
     if (!scheduleRef.current) return;
     setIsDownloading(true);
     try {
-      if (!window.html2canvas) {
-        await new Promise((resolve, reject) => {
-          const script = document.createElement("script");
-          script.src = "https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js";
-          script.onload = resolve;
-          script.onerror = reject;
-          document.head.appendChild(script);
-        });
+      const canvas = await captureScheduleCanvas();
+      if (!canvas) return;
+
+      const fileName = `Repayment_Schedule_${loanNo ? loanNo : 'Chola'}.jpg`;
+      const base64Data = canvas.toDataURL("image/jpeg", 0.95).split(",")[1];
+
+      if (Capacitor.isNativePlatform()) {
+        await saveToDownloadsFolder(fileName, base64Data);
+      } else {
+        const link = document.createElement("a");
+        link.href = `data:image/jpeg;base64,${base64Data}`;
+        link.download = fileName;
+        link.click();
+        toast.success("JPG downloaded");
       }
-
-      const originalTransform = scheduleRef.current.style.transform;
-      scheduleRef.current.style.transform = "scale(1)";
-
-      const mobileScale = Math.max(window.devicePixelRatio || 1, 3);
-
-      const canvas = await window.html2canvas(scheduleRef.current, {
-        scale: mobileScale,
-        useCORS: true,
-        backgroundColor: "#ffffff",
-        windowWidth: 794,
-        windowHeight: 1120,
-      });
-
-      scheduleRef.current.style.transform = originalTransform;
-
-      const image = canvas.toDataURL("image/jpeg", 1.0);
-      const link = document.createElement("a");
-      link.href = image;
-      link.download = `Repayment_Schedule_${loanNo ? loanNo : 'Chola'}.jpg`;
-      link.click();
     } catch (error) {
       console.error("Failed to generate JPG image:", error);
-      alert("Failed to download JPG. Please try printing or use another browser.");
+      toast.error("Failed to download JPG: " + (error?.message || error));
     } finally {
       setIsDownloading(false);
     }
@@ -205,51 +395,28 @@ export default function EmiCalculator() {
     if (!scheduleRef.current) return;
     setIsPdfDownloading(true);
     try {
-      if (!window.html2canvas) {
-        await new Promise((resolve, reject) => {
-          const script = document.createElement("script");
-          script.src = "https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js";
-          script.onload = resolve;
-          script.onerror = reject;
-          document.head.appendChild(script);
-        });
-      }
+      const canvas = await captureScheduleCanvas();
+      if (!canvas) return;
 
-      if (!window.jspdf) {
-        await new Promise((resolve, reject) => {
-          const script = document.createElement("script");
-          script.src = "https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js";
-          script.onload = resolve;
-          script.onerror = reject;
-          document.head.appendChild(script);
-        });
-      }
+      const imgData = canvas.toDataURL("image/jpeg", 0.95);
+      const pdf = new jspdf("p", "mm", "a4");
 
-      const originalTransform = scheduleRef.current.style.transform;
-      scheduleRef.current.style.transform = "scale(1)";
-
-      const canvas = await window.html2canvas(scheduleRef.current, {
-        scale: 2,
-        useCORS: true,
-        backgroundColor: "#ffffff",
-        windowWidth: 794,
-        windowHeight: 1120,
-      });
-
-      scheduleRef.current.style.transform = originalTransform;
-
-      const imgData = canvas.toDataURL("image/jpeg", 1.0);
-      const { jsPDF } = window.jspdf;
-      const pdf = new jsPDF("p", "mm", "a4");
-      
       const pdfWidth = pdf.internal.pageSize.getWidth();
       const pdfHeight = pdf.internal.pageSize.getHeight();
-      
+
       pdf.addImage(imgData, "JPEG", 0, 0, pdfWidth, pdfHeight);
-      pdf.save(`Repayment_Schedule_${loanNo ? loanNo : 'Chola'}.pdf`);
+      const fileName = `Repayment_Schedule_${loanNo ? loanNo : 'Chola'}.pdf`;
+
+      if (Capacitor.isNativePlatform()) {
+        const pdfBase64 = pdf.output("datauristring").split(",")[1];
+        await saveToDownloadsFolder(fileName, pdfBase64);
+      } else {
+        pdf.save(fileName);
+        toast.success("PDF downloaded");
+      }
     } catch (error) {
       console.error("Failed to generate PDF document:", error);
-      alert("Failed to download PDF. Please try again.");
+      toast.error("Failed to download PDF: " + (error?.message || error));
     } finally {
       setIsPdfDownloading(false);
     }
@@ -265,6 +432,9 @@ export default function EmiCalculator() {
   const chunkSize = Math.min(12, Math.ceil(totalItems / layoutMode)) || 1;
   const col1 = safeSchedule.slice(0, chunkSize);
   const col2 = layoutMode === 2 ? safeSchedule.slice(chunkSize, chunkSize * 2) : [];
+
+  const scaledWidth = Math.round(A4_WIDTH * effectiveScale);
+  const scaledHeight = Math.round(A4_HEIGHT * effectiveScale);
 
   return (
     <div className="space-y-4 max-w-7xl mx-auto pb-12 relative">
@@ -286,33 +456,36 @@ export default function EmiCalculator() {
           width: 794px !important;
           min-width: 794px !important;
           max-width: 794px !important;
-          height: 1070px !important;
-          max-height: 1070px !important;
-          font-size: 13.5px !important; 
+          height: 1122px !important;
+          max-height: 1122px !important;
+          font-size: 13px !important;
           box-sizing: border-box !important;
           background-color: #ffffff !important;
-          padding: 10px 18px !important;
+          padding: 12px 20px !important;
           border: 2px solid ${isColorTheme ? '#153f74' : '#222222'} !important;
           overflow: hidden !important;
           -webkit-print-color-adjust: exact !important;
           print-color-adjust: exact !important;
         }
-        .fixed-a4-model .instructions-section, 
-        .fixed-a4-model .instructions-section p, 
-        .fixed-a4-model .instructions-section li, 
+        .fixed-a4-model .instructions-section,
+        .fixed-a4-model .instructions-section p,
+        .fixed-a4-model .instructions-section li,
         .fixed-a4-model .instructions-section span {
           font-size: 10.5px !important;
-          line-height: 1.15 !important;
+          line-height: 1.18 !important;
         }
         .fixed-a4-model .insurance-policy-box,
         .fixed-a4-model .insurance-policy-box p,
         .fixed-a4-model .insurance-policy-box li,
-        .fixed-a4-model .insurance-policy-box span,
+        .fixed-a4-model .insurance-policy-box span {
+          font-size: 11px !important;
+          line-height: 1.18 !important;
+        }
         .fixed-a4-model .notice-footer .notice-content,
         .fixed-a4-model .notice-footer .notice-content p,
         .fixed-a4-model .notice-footer .notice-content span {
-          font-size: 11.5px !important;
-          line-height: 1.2 !important;
+          font-size: 11px !important;
+          line-height: 1.18 !important;
         }
         .fixed-a4-model table {
           font-family: 'Courier New', Courier, monospace !important;
@@ -321,7 +494,7 @@ export default function EmiCalculator() {
           print-color-adjust: exact !important;
         }
         .fixed-a4-model table th {
-          font-size: 13px !important;
+          font-size: 15px !important;
           letter-spacing: -0.5px;
           padding: 2px 4px !important;
           background-color: ${isColorTheme ? '#153f74' : '#ffffff'} !important;
@@ -331,7 +504,7 @@ export default function EmiCalculator() {
           print-color-adjust: exact !important;
         }
         .fixed-a4-model table td {
-          font-size: 13px !important;
+          font-size: 15px !important;
           letter-spacing: -0.5px;
           padding: 2px 4px !important;
           border: 1px solid ${isColorTheme ? '#cccccc' : '#666666'} !important;
@@ -340,11 +513,10 @@ export default function EmiCalculator() {
           print-color-adjust: exact !important;
         }
 
-        /* STRICT SINGLE-PAGE PRINT & PDF LOCK */
         @media print {
           @page {
             size: A4 portrait;
-            margin: 0; 
+            margin: 0;
           }
           html, body {
             width: 210mm;
@@ -352,31 +524,28 @@ export default function EmiCalculator() {
             margin: 0 !important;
             padding: 0 !important;
             background-color: #ffffff !important;
-            overflow: hidden !important;
             -webkit-print-color-adjust: exact !important;
+            print-color-adjust: exact !important;
           }
-          header, nav, button, .fixed {
-            display: none !important;
+          body * {
+            visibility: hidden !important;
           }
-          body > div {
-            margin: 0 !important;
-            padding: 0 !important;
-            max-width: none !important;
-          }
-          body > div > div:not(:has(#printable-schedule-wrapper)) {
-            display: none !important;
+          #printable-schedule-wrapper, #printable-schedule-wrapper * {
+            visibility: visible !important;
           }
           #printable-schedule-wrapper {
-            position: absolute !important;
+            position: fixed !important;
             left: 0 !important;
             top: 0 !important;
             width: 794px !important;
-            height: 1020px !important;
+            height: 1122px !important;
             margin: 0 !important;
             padding: 0 !important;
-            overflow: hidden !important;
-            page-break-after: avoid !important;
-            page-break-inside: avoid !important;
+            background-color: #ffffff !important;
+            display: flex !important;
+            justify-content: center !important;
+            align-items: flex-start !important;
+            z-index: 9999 !important;
           }
           .fixed-a4-model {
             transform: none !important;
@@ -384,298 +553,359 @@ export default function EmiCalculator() {
             left: 0 !important;
             top: 0 !important;
             width: 794px !important;
-            height: 1020px !important;
-            padding: 6px 18px !important; 
+            height: 1122px !important;
+            padding: 12px 20px !important;
             border: 2px solid ${isColorTheme ? '#153f74' : '#222222'} !important;
             box-shadow: none !important;
-            page-break-after: avoid !important;
-            page-break-inside: avoid !important;
-            break-after: avoid !important;
-            break-inside: avoid !important;
+            background-color: #ffffff !important;
           }
         }
       `}</style>
 
-      {/* Minimal Header with Back Button */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-border pb-3">
-        <div className="flex items-center gap-2">
-          <button
-            onClick={() => navigate(-1)}
-            className="inline-flex items-center justify-center p-1.5 bg-secondary text-secondary-foreground rounded hover:bg-secondary/85 transition cursor-pointer"
-            title="Go Back"
-          >
-            <ArrowLeft className="w-4 h-4" />
-          </button>
-          <div>
-            <h1 className="text-lg font-bold tracking-tight text-foreground flex items-center gap-1.5">
-              <Calculator className="w-4 h-4 text-primary" />
-              Repayment Schedule Generator
-            </h1>
-            <p className="text-xs text-muted-foreground">
-              -
-            </p>
+      {/* Header with Parameters Form & Generate/Edit Button */}
+      <div className="no-print bg-card border border-border rounded-xl p-4 shadow-sm space-y-3">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-border pb-3">
+          <div className="flex items-center gap-2">
+            <button
+              onClick={() => navigate(-1)}
+              className="inline-flex items-center justify-center p-1.5 bg-secondary text-secondary-foreground rounded hover:bg-secondary/85 transition cursor-pointer"
+              title="Go Back"
+            >
+              <ArrowLeft className="w-4 h-4" />
+            </button>
+            <div>
+              <h1 className="text-base font-bold tracking-tight text-foreground flex items-center gap-1.5">
+                <Calculator className="w-4 h-4 text-primary" />
+                Repayment Schedule Generator
+              </h1>
+              <p className="text-[11px] text-muted-foreground">
+                {isGenerated
+                  ? "Pinch with two fingers to zoom in/out, or tap Fit to reset to screen width."
+                  : "Fill in the loan parameters below and click Generate Schedule to create the repayment plan."}
+              </p>
+            </div>
+          </div>
+          <div className="flex items-center gap-1.5 flex-wrap">
+            <button
+              onClick={() => setIsSettingsOpen(true)}
+              className="inline-flex items-center gap-1 px-2.5 py-1.5 bg-secondary text-secondary-foreground text-xs font-medium rounded hover:bg-secondary/85 transition cursor-pointer"
+              title="EMI Settings"
+            >
+              <Settings className="w-3.5 h-3.5 text-primary" />
+              Settings
+            </button>
+            {isGenerated && (
+              <button
+                onClick={handleResetFit}
+                className="inline-flex items-center gap-1 px-2.5 py-1.5 bg-secondary text-secondary-foreground text-xs font-medium rounded hover:bg-secondary/85 transition cursor-pointer"
+                title="Auto-fit to screen"
+              >
+                <Maximize2 className="w-3.5 h-3.5 text-primary" />
+                <span>Fit ({Math.round(effectiveScale * 100)}%)</span>
+              </button>
+            )}
+            {isGenerated && (
+              <button
+                onClick={() => setIsGenerated(false)}
+                className="inline-flex items-center gap-1 px-3 py-1.5 bg-amber-600 text-white text-xs font-bold rounded hover:bg-amber-700 transition cursor-pointer shadow-xs"
+              >
+                <Edit3 className="w-3.5 h-3.5" />
+                Edit Schedule
+              </button>
+            )}
+            {isGenerated && totalItems > 0 && (
+              <>
+                <button
+                  onClick={handleDownloadPdf}
+                  disabled={isPdfDownloading}
+                  className="inline-flex items-center gap-1 px-2.5 py-1.5 bg-secondary text-secondary-foreground text-xs font-medium rounded hover:bg-secondary/85 transition disabled:opacity-50 cursor-pointer"
+                >
+                  <FileText className="w-3.5 h-3.5 text-primary" />
+                  {isPdfDownloading ? "Exporting PDF..." : "Download PDF"}
+                </button>
+                <button
+                  onClick={handleDownloadJpg}
+                  disabled={isDownloading}
+                  className="inline-flex items-center gap-1 px-2.5 py-1.5 bg-secondary text-secondary-foreground text-xs font-medium rounded hover:bg-secondary/85 transition disabled:opacity-50 cursor-pointer"
+                >
+                  <Download className="w-3.5 h-3.5 text-primary" />
+                  {isDownloading ? "Exporting JPG..." : "Download JPG"}
+                </button>
+                <button
+                  onClick={handlePrint}
+                  className="inline-flex items-center gap-1 px-2.5 py-1.5 bg-primary text-primary-foreground text-xs font-medium rounded hover:opacity-90 transition cursor-pointer"
+                >
+                  <Printer className="w-3.5 h-3.5" />
+                  Print A4
+                </button>
+              </>
+            )}
           </div>
         </div>
-        <div className="flex items-center gap-1.5 flex-wrap">
-          <button
-            onClick={() => setIsSettingsOpen(true)}
-            className="inline-flex items-center gap-1 px-2.5 py-1.5 bg-secondary text-secondary-foreground text-xs font-medium rounded hover:bg-secondary/85 transition cursor-pointer"
-            title="EMI Settings"
-          >
-            <Settings className="w-3.5 h-3.5 text-primary" />
-            Settings
-          </button>
-          {isGenerated && (
-            <>
-              <button
-                onClick={handleDownloadPdf}
-                disabled={totalItems === 0 || isPdfDownloading}
-                className="inline-flex items-center gap-1 px-2.5 py-1.5 bg-secondary text-secondary-foreground text-xs font-medium rounded hover:bg-secondary/85 transition disabled:opacity-50 cursor-pointer"
-              >
-                <FileText className="w-3.5 h-3.5 text-primary" />
-                {isPdfDownloading ? "Exporting PDF..." : "Download PDF"}
-              </button>
-              <button
-                onClick={handleDownloadJpg}
-                disabled={totalItems === 0 || isDownloading}
-                className="inline-flex items-center gap-1 px-2.5 py-1.5 bg-secondary text-secondary-foreground text-xs font-medium rounded hover:bg-secondary/85 transition disabled:opacity-50 cursor-pointer"
-              >
-                <Download className="w-3.5 h-3.5 text-primary" />
-                {isDownloading ? "Exporting JPG..." : "Download JPG"}
-              </button>
-              <button
-                onClick={handlePrint}
-                disabled={totalItems === 0}
-                className="inline-flex items-center gap-1 px-2.5 py-1.5 bg-primary text-primary-foreground text-xs font-medium rounded hover:opacity-90 transition disabled:opacity-50 cursor-pointer"
-              >
-                <Printer className="w-3.5 h-3.5" />
-                Print A4
-              </button>
-            </>
-          )}
-        </div>
-      </div>
 
-      {/* Floating Trigger Button for Options */}
-      {isGenerated && (
-        <button
-          onClick={() => setIsOptionsOpen(true)}
-          className="fixed bottom-6 right-6 z-40 inline-flex items-center gap-1.5 px-3.5 py-2.5 bg-primary text-primary-foreground font-bold text-xs rounded-full shadow-xl hover:opacity-95 transition cursor-pointer"
-        >
-          <Sliders className="w-4 h-4" />
-          Options / Parameters
-        </button>
-      )}
+        {/* Inline Parameters Header Form */}
+        {!isGenerated && (
+          <div className="space-y-3 animate-in fade-in">
+            <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-2.5 pt-1 text-xs">
+              <div className="space-y-0.5">
+                <label className="font-medium text-muted-foreground">Loan Number</label>
+                <input
+                  type="text"
+                  value={loanNo}
+                  onChange={(e) => setLoanNo(e.target.value)}
+                  placeholder=""
+                  className="w-full px-2.5 py-1 bg-background border border-border rounded text-foreground focus:outline-none focus:ring-1 focus:ring-primary"
+                />
+              </div>
 
-      {/* Minimal Initial Setup View */}
-      {!isGenerated ? (
-        <div className="max-w-sm mx-auto bg-card border border-border rounded-lg p-4 shadow-sm space-y-3">
-          <h2 className="text-sm font-bold text-foreground border-b border-border pb-2 flex items-center gap-1.5">
-            <Calculator className="w-3.5 h-3.5 text-primary" />
-            Enter Loan Parameters
-          </h2>
+              <div className="space-y-0.5">
+                <label className="font-medium text-muted-foreground">DO Date</label>
+                <input
+                  type="date"
+                  value={doDate}
+                  onChange={(e) => setDoDate(e.target.value)}
+                  className="w-full px-2.5 py-1 bg-background border border-border rounded text-foreground focus:outline-none focus:ring-1 focus:ring-primary"
+                />
+              </div>
 
-          <div className="space-y-2.5 text-xs">
-            <div className="space-y-0.5">
-              <label className="font-medium text-foreground">Loan Number</label>
-              <input
-                type="text"
-                placeholder="e.g. CHOLA12345678"
-                value={loanNo}
-                onChange={(e) => setLoanNo(e.target.value)}
-                className="w-full px-2.5 py-1 bg-background border border-border rounded text-foreground focus:outline-none focus:ring-1 focus:ring-primary"
-              />
-            </div>
-
-            <div className="space-y-0.5">
-              <label className="font-medium text-foreground">DO Date (Delivery / Purchase Date)</label>
-              <input
-                type="date"
-                value={doDate}
-                onChange={(e) => setDoDate(e.target.value)}
-                className="w-full px-2.5 py-1 bg-background border border-border rounded text-foreground focus:outline-none focus:ring-1 focus:ring-primary"
-              />
-            </div>
-
-            <div className="space-y-0.5">
-              <label className="font-medium text-foreground flex justify-between">
-                <span>Monthly EMI Amount</span>
-                <span className="font-bold text-primary">₹{Number(emi || 0).toLocaleString('en-IN')}</span>
-              </label>
-              <div className="relative">
-                <span className="absolute inset-y-0 left-0 pl-2 flex items-center text-muted-foreground text-xs">₹</span>
+              <div className="space-y-0.5">
+                <label className="font-medium text-muted-foreground">Product Cost (₹)</label>
                 <input
                   type="number"
                   min="0"
-                  step="500"
-                  placeholder="e.g. 4014"
-                  value={emi}
+                  step="1"
+                  value={productCost}
                   onWheel={(e) => e.target.blur()}
-                  onChange={(e) => setEmi(e.target.value === "" ? "" : Math.max(0, Number(e.target.value)))}
-                  className="w-full pl-6 pr-2.5 py-1 bg-background border border-border rounded text-foreground focus:outline-none focus:ring-1 focus:ring-primary"
+                  onChange={(e) => setProductCost(e.target.value === "" ? "" : Math.max(0, Number(e.target.value)))}
+                  className="w-full px-2.5 py-1 bg-background border border-border rounded text-foreground focus:outline-none focus:ring-1 focus:ring-primary"
                 />
+              </div>
+
+              <div className="space-y-0.5">
+                <label className="font-medium text-muted-foreground">Net Loan Amount (₹)</label>
+                <input
+                  type="number"
+                  min="0"
+                  step="1"
+                  value={netLoanAmount}
+                  onWheel={(e) => e.target.blur()}
+                  onChange={(e) => setNetLoanAmount(e.target.value === "" ? "" : Math.max(0, Number(e.target.value)))}
+                  className="w-full px-2.5 py-1 bg-background border border-border rounded text-foreground focus:outline-none focus:ring-1 focus:ring-primary"
+                />
+              </div>
+
+              <div className="space-y-0.5">
+                <label className="font-medium text-muted-foreground">Tenure (Months)</label>
+                <input
+                  type="number"
+                  min="1"
+                  max="24"
+                  step="1"
+                  value={tenureMonths}
+                  onWheel={(e) => e.target.blur()}
+                  onChange={(e) => {
+                    const val = e.target.value === "" ? "" : Math.min(24, Math.max(0, Number(e.target.value)));
+                    setTenureMonths(val);
+                  }}
+                  className="w-full px-2.5 py-1 bg-background border border-border rounded text-foreground focus:outline-none focus:ring-1 focus:ring-primary"
+                />
+              </div>
+
+              <div className="flex items-end gap-2">
+                <button
+                  onClick={() => {
+                    setUserZoom(1);
+                    setIsGenerated(true);
+                  }}
+                  className="w-full h-7 bg-primary text-primary-foreground font-bold rounded text-xs hover:opacity-90 transition cursor-pointer flex items-center justify-center gap-1 shadow-xs"
+                >
+                  <Check className="w-3.5 h-3.5" />
+                  Generate Schedule
+                </button>
               </div>
             </div>
 
-            <div className="space-y-0.5">
-              <label className="font-medium text-foreground flex justify-between">
-                <span>Tenure (Months, Max 24)</span>
-                <span className="font-bold text-primary">{tenureMonths ? `${tenureMonths} Months` : 'Enter months'}</span>
-              </label>
-              <input
-                type="number"
-                min="1"
-                max="24"
-                step="1"
-                placeholder="e.g. 7"
-                value={tenureMonths}
-                onWheel={(e) => e.target.blur()}
-                onChange={(e) => {
-                  const val = e.target.value === "" ? "" : Math.min(24, Math.max(0, Number(e.target.value)));
-                  setTenureMonths(val);
-                }}
-                className="w-full px-2.5 py-1 bg-background border border-border rounded text-foreground focus:outline-none focus:ring-1 focus:ring-primary"
-              />
-            </div>
+            {/* Add-ons and Theme controls row */}
+            <div className="flex flex-wrap items-center justify-between gap-3 pt-2 border-t border-border/60 text-xs">
+              <div className="flex flex-wrap items-center gap-2">
+                <span className="font-bold text-[10px] uppercase tracking-wide text-muted-foreground">Add-ons:</span>
 
-            {/* Theme Toggle Checkbox */}
-            <div className="flex items-center gap-1.5 pt-0.5">
-              <input
-                type="checkbox"
-                id="initial-color-theme"
-                checked={isColorTheme}
-                onChange={(e) => setIsColorTheme(e.target.checked)}
-                className="w-3.5 h-3.5 text-primary accent-primary rounded border-border cursor-pointer"
-              />
-              <label htmlFor="initial-color-theme" className="font-medium text-foreground cursor-pointer select-none flex items-center gap-1">
-                <Palette className="w-3 h-3 text-primary" /> Use Color Theme (Uncheck for Monochrome Grey)
-              </label>
-            </div>
-
-            {/* Device Insurance Checkbox */}
-            <div className="flex items-center gap-1.5 pt-0.5">
-              <input
-                type="checkbox"
-                id="initial-insurance"
-                checked={isDeviceInsurance}
-                onChange={(e) => setIsDeviceInsurance(e.target.checked)}
-                className="w-3.5 h-3.5 text-primary accent-primary rounded border-border cursor-pointer"
-              />
-              <label htmlFor="initial-insurance" className="font-medium text-foreground cursor-pointer select-none">
-                Is Device Insurance Available
-              </label>
-            </div>
-          </div>
-
-          <button
-            onClick={() => {
-              if (Number(emi) > 0 && Number(tenureMonths) > 0) {
-                setIsGenerated(true);
-              } else {
-                alert("Please enter a valid EMI amount and tenure months.");
-              }
-            }}
-            className="w-full py-2 bg-primary text-primary-foreground font-bold text-xs rounded hover:opacity-90 transition shadow-sm cursor-pointer flex items-center justify-center gap-1.5"
-          >
-            <CheckCircle className="w-3.5 h-3.5" />
-            Generate Schedule
-          </button>
-        </div>
-      ) : (
-        /* A4 Printable Modal View with Auto-fit Screen Scaling */
-        <div 
-          ref={containerRef} 
-          className="w-full overflow-hidden flex justify-center py-2"
-        >
-          <div 
-            id="printable-schedule-wrapper"
-            style={{ 
-              width: `${794 / scale}px`, 
-              height: `${1122 / scale}px`,
-              transition: 'width 0.2s ease, height 0.2s ease'
-            }}
-            className="relative shrink-0 flex items-start justify-center"
-          >
-            <div 
-              ref={scheduleRef} 
-              style={{ 
-                transform: `scale(${scale})`, 
-                transformOrigin: 'top center',
-                position: 'absolute',
-                top: 0,
-                left: `calc(50% - 397px)`
-              }}
-              className="fixed-a4-model bg-white text-gray-900 border p-2 space-y-1.5 flex flex-col justify-start"
-            >
-              <div className="space-y-1">
-                {/* Template Header Card */}
-                <div 
-                  className={`border relative ${isColorTheme ? 'bg-[#153f74] text-white border-[#153f74]' : 'bg-white text-black border-black'}`}
-                  style={isColorTheme ? { backgroundColor: '#153f74', WebkitPrintColorAdjust: 'exact', printColorAdjust: 'exact' } : {}}
+                <div
+                  onClick={() => calculatedAcko && toggleAddon("acko_mobile")}
+                  className={`px-2 py-1 rounded border flex items-center gap-1.5 cursor-pointer text-[11px] ${
+                    selectedAddons.includes("acko_mobile") ? 'bg-primary/10 border-primary text-foreground font-medium' : 'bg-background border-border text-muted-foreground'
+                  }`}
                 >
-                  <div className={`absolute right-2 top-1 bg-white p-1 rounded border flex flex-col items-center justify-center text-center ${isColorTheme ? 'border-blue-900' : 'border-black'}`} style={{ backgroundColor: '#ffffff', WebkitPrintColorAdjust: 'exact', printColorAdjust: 'exact' }}>
-                    <img 
-                      src={`https://api.qrserver.com/v1/create-qr-code/?size=120x120&data=${encodeURIComponent("https://play.google.com/store/apps/details?id=io.ionic.d2c")}`} 
-                      alt="Chola One App QR" 
-                      className="w-[60px] h-[60px] block"
-                    />
-                    <span className={`text-[8.5px] font-extrabold mt-0.5 leading-none ${isColorTheme ? 'text-[#153f74]' : 'text-black'}`}>Chola One</span>
-                  </div>
-
-                  <div className={`py-1 text-center border-b flex justify-between items-center px-3 pr-24 ${isColorTheme ? 'bg-[#153f74] border-blue-800' : 'bg-white border-black'}`} style={isColorTheme ? { backgroundColor: '#0d3c6c', WebkitPrintColorAdjust: 'exact', printColorAdjust: 'exact' } : {}}>
-                    <h2 className={`text-xs font-extrabold uppercase tracking-widest flex items-center gap-2 ${isColorTheme ? 'text-white' : 'text-black'}`}>
-                      <u>Repayment Schedule</u> {loanNo ? <span className={`border px-2 py-0.5 rounded text-[13px] font-bold ${isColorTheme ? 'bg-black-900/80 border-black-900 text-black-100' : 'border-black text-black'}`}>Loan No: {loanNo}</span> : null}
-                    </h2>
-                    <span className={`text-[10px] font-bold border px-1.5 py-0.2 rounded ${isColorTheme ? 'bg-blue-900/60 border-blue-900 text-blue-100' : 'border-black text-black'}`}>
-                      Insurance: {isDeviceInsurance ? <span className="underline">Available (Yes)</span> : "Not Available (No)"}
-                    </span>
-                  </div>
-                  <div className={`grid grid-cols-4 divide-x py-1 px-2 text-center pr-24 ${isColorTheme ? 'bg-[#153f74] divide-blue-800 border-b border-blue-800' : 'bg-white divide-black border-b border-black'}`} style={isColorTheme ? { backgroundColor: '#153f74', WebkitPrintColorAdjust: 'exact', printColorAdjust: 'exact' } : {}}>
-                    <div>
-                      <p className={`text-[10px] font-bold uppercase tracking-wide ${isColorTheme ? 'text-white' : 'text-black'}`}>Principal Amount</p>
-                      <p className={`text-[12px] font-bold mt-0.5 ${isColorTheme ? 'text-white' : 'text-black'}`}>₹ {principal.toLocaleString('en-IN')}</p>
-                    </div>
-                    <div>
-                      <p className={`text-[10px] font-bold uppercase tracking-wide ${isColorTheme ? 'text-white' : 'text-black'}`}>Total EMIs</p>
-                      <p className={`text-[12px] font-bold mt-0.5 ${isColorTheme ? 'text-white' : 'text-black'}`}>{tenureMonths}</p>
-                    </div>
-                    <div>
-                      <p className={`text-[10px] font-bold uppercase tracking-wide ${isColorTheme ? 'text-white' : 'text-black'}`}>EMI Amount</p>
-                      <p className={`text-[12px] font-bold mt-0.5 ${isColorTheme ? 'text-white' : 'text-black'}`}>₹ {Number(emi || 0).toLocaleString('en-IN')}</p>
-                    </div>
-                    <div>
-                      <p className={`text-[10px] font-bold uppercase tracking-wide ${isColorTheme ? 'text-white' : 'text-black'}`}>Starting Date</p>
-                      <p className={`text-[12px] font-bold mt-0.5 ${isColorTheme ? 'text-white' : 'text-black'}`}>{firstEmiDate ? formatDateToDDMMYYYY(firstEmiDate) : "—"}</p>
-                    </div>
-                  </div>
+                  <input
+                    type="checkbox"
+                    checked={selectedAddons.includes("acko_mobile")}
+                    onChange={() => {}}
+                    disabled={!calculatedAcko}
+                    className="rounded border-border accent-primary cursor-pointer w-3 h-3"
+                  />
+                  <span>ACKO Mobile Insurance ({calculatedAcko ? `₹${calculatedAcko.amount}` : '—'})</span>
                 </div>
 
-                {/* Multi-Column Tables (Principal and EMI columns aligned to center) */}
-                <div>
-                  {totalItems === 0 ? (
-                    <div className="p-6 text-center text-gray-500 font-medium text-xs">
-                      Please enter EMI amount and tenure months above to generate the schedule.
+                {AVAILABLE_ADDONS.map(addon => {
+                  const isChecked = selectedAddons.includes(addon.id) || selectedAddons.includes(addon.name);
+                  return (
+                    <div
+                      key={addon.id}
+                      onClick={() => toggleAddon(addon.id)}
+                      className={`px-2 py-1 rounded border flex items-center gap-1.5 cursor-pointer text-[11px] ${
+                        isChecked ? 'bg-primary/10 border-primary text-foreground font-medium' : 'bg-background border-border text-muted-foreground'
+                      }`}
+                    >
+                      <input
+                        type="checkbox"
+                        checked={isChecked}
+                        onChange={() => {}}
+                        className="rounded border-border accent-primary cursor-pointer w-3 h-3"
+                      />
+                      <span>{addon.name} (₹{addon.amount})</span>
                     </div>
-                  ) : (
-                    <div className={`grid ${layoutMode === 2 ? 'grid-cols-2' : 'grid-cols-1'} gap-2 mx-auto`}>
+                  );
+                })}
+              </div>
+
+              <div className="flex items-center gap-1.5">
+                <input
+                  type="checkbox"
+                  id="header-color-theme"
+                  checked={isColorTheme}
+                  onChange={(e) => setIsColorTheme(e.target.checked)}
+                  className="w-3.5 h-3.5 text-primary accent-primary rounded border-border cursor-pointer"
+                />
+                <label htmlFor="header-color-theme" className="font-medium text-foreground cursor-pointer select-none flex items-center gap-1 text-[11px]">
+                  <Palette className="w-3 h-3 text-primary" /> Use Color Theme
+                </label>
+              </div>
+            </div>
+          </div>
+        )}
+      </div>
+
+      {/* Opening / Un-generated state message */}
+      {!isGenerated ? (
+        <div className="bg-card border border-border rounded-xl p-12 text-center space-y-3">
+          <Calculator className="w-10 h-10 text-muted-foreground/40 mx-auto" />
+          <h2 className="text-sm font-bold text-foreground">Configure Loan Parameters in Header</h2>
+          <p className="text-xs text-muted-foreground max-w-sm mx-auto">
+            Please enter the loan details, tenure, and add-ons above, then click <strong>Generate Schedule</strong> to preview and print the repayment schedule.
+          </p>
+          <button
+            onClick={() => {
+              setUserZoom(1);
+              setIsGenerated(true);
+            }}
+            className="px-4 py-2 bg-primary text-primary-foreground font-bold rounded-lg text-xs hover:opacity-95 transition cursor-pointer inline-flex items-center gap-1.5 shadow-sm"
+          >
+            <Check className="w-4 h-4" />
+            Generate Schedule Now
+          </button>
+        </div>
+      ) : totalItems > 0 ? (
+        /* Auto-fit + Interactive Touch Pinch-to-Zoom Schedule Preview */
+        <div
+          ref={containerRef}
+          onTouchStart={handleTouchStart}
+          onTouchMove={handleTouchMove}
+          onTouchEnd={handleTouchEnd}
+          onTouchCancel={handleTouchEnd}
+          onWheel={handleWheel}
+          style={{
+            touchAction: isPinching || userZoom > 1.02 ? "none" : "pan-y pinch-zoom",
+          }}
+          className="w-full overflow-auto rounded-xl bg-muted/20 border border-border/60 py-3 px-2 flex justify-center items-start select-none"
+        >
+          <div
+            id="printable-schedule-wrapper"
+            style={{
+              width: `${scaledWidth}px`,
+              height: `${scaledHeight}px`,
+              minWidth: `${scaledWidth}px`,
+              transition: isPinching ? "none" : "width 0.15s ease, height 0.15s ease",
+            }}
+            className="relative shrink-0 bg-white shadow-md"
+          >
+            <div
+              ref={scheduleRef}
+              style={{
+                transform: `scale(${effectiveScale})`,
+                transformOrigin: "top left",
+                position: "absolute",
+                top: 0,
+                left: 0,
+                transition: isPinching ? "none" : "transform 0.15s ease",
+              }}
+              className="fixed-a4-model bg-white text-gray-900 border p-3 space-y-2 flex flex-col justify-start"
+            >
+              <div className="space-y-1.5 flex-1 flex flex-col justify-between">
+                <div>
+                  {/* Template Header Card */}
+                  <div
+                    className={`border relative ${isColorTheme ? 'bg-[#153f74] text-white border-[#153f74]' : 'bg-white text-black border-black'}`}
+                    style={isColorTheme ? { backgroundColor: '#153f74', WebkitPrintColorAdjust: 'exact', printColorAdjust: 'exact' } : {}}
+                  >
+                    <div className={`absolute right-1 top-1 bg-white p-1 rounded border flex flex-col items-center justify-center text-center ${isColorTheme ? 'border-blue-900' : 'border-black'}`} style={{ backgroundColor: '#ffffff', WebkitPrintColorAdjust: 'exact', printColorAdjust: 'exact' }}>
+                      <img
+                        src={`https://api.qrserver.com/v1/create-qr-code/?size=150x150&data=${encodeURIComponent("https://play.google.com/store/apps/details?id=io.ionic.d2c")}`}
+                        alt="Chola One App QR"
+                        crossOrigin="anonymous"
+                        className="w-[72px] h-[72px] block"
+                      />
+                      <span className={`text-[8px] font-extrabold mt-0.5 leading-none ${isColorTheme ? 'text-[#153f74]' : 'text-black'}`}>Chola One</span>
+                    </div>
+
+                    <div className={`py-3 text-center border-b flex justify-between items-center px-3 pr-20 ${isColorTheme ? 'bg-[#153f74] border-blue-800' : 'bg-white border-black'}`} style={isColorTheme ? { backgroundColor: '#0d3c6c', WebkitPrintColorAdjust: 'exact', printColorAdjust: 'exact' } : {}}>
+                      <h2 className={`text-xs font-extrabold uppercase tracking-widest flex items-center gap-2 ${isColorTheme ? 'text-white' : 'text-black'}`}>
+                        <u>Repayment Schedule</u> {loanNo ? <span className={`border px-2 py-0.5 rounded text-[11.5px] font-bold ${isColorTheme ? 'border-blue-900 text-white' : 'border-black text-black'}`}>Loan No: {loanNo}</span> : null}
+                      </h2>
+                      <span className={`text-[9px] font-bold border px-1.5 py-0.2 rounded ${isColorTheme ? 'border-blue-900 text-white' : 'border-black text-black'}`}>
+                        Insurance Eligibility: {selectedAddons.length > 0 ? "Yes" : "No"}
+                      </span>
+                    </div>
+                    <div className={`grid grid-cols-4 divide-x py-1 px-2 text-center pr-20 ${isColorTheme ? 'bg-[#153f74] divide-blue-800 border-b border-blue-800' : 'bg-white divide-black border-b border-black'}`} style={isColorTheme ? { backgroundColor: '#153f74', WebkitPrintColorAdjust: 'exact', printColorAdjust: 'exact' } : {}}>
+                      <div>
+                        <p className={`text-[9px] font-bold uppercase tracking-wide ${isColorTheme ? 'text-white' : 'text-black'}`}>Principal Amount</p>
+                        <p className={`text-[11px] font-bold mt-0.5 ${isColorTheme ? 'text-white' : 'text-black'}`}>₹ {principal.toLocaleString('en-IN')}</p>
+                      </div>
+                      <div>
+                        <p className={`text-[9px] font-bold uppercase tracking-wide ${isColorTheme ? 'text-white' : 'text-black'}`}>Total EMIs</p>
+                        <p className={`text-[11px] font-bold mt-0.5 ${isColorTheme ? 'text-white' : 'text-black'}`}>{tenureMonths}</p>
+                      </div>
+                      <div>
+                        <p className={`text-[9px] font-bold uppercase tracking-wide ${isColorTheme ? 'text-white' : 'text-black'}`}>EMI Amount</p>
+                        <p className={`text-[11px] font-bold mt-0.5 ${isColorTheme ? 'text-white' : 'text-black'}`}>₹ {regularEmiDisplay.toLocaleString('en-IN')}</p>
+                      </div>
+                      <div>
+                        <p className={`text-[9px] font-bold uppercase tracking-wide ${isColorTheme ? 'text-white' : 'text-black'}`}>Starting Date</p>
+                        <p className={`text-[11px] font-bold mt-0.5 ${isColorTheme ? 'text-white' : 'text-black'}`}>{firstEmiDate ? formatDateToDDMMYYYY(firstEmiDate) : "—"}</p>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Multi-Column Tables */}
+                  <div className="mt-1">
+                    <div className={`grid ${layoutMode === 2 ? 'grid-cols-2' : 'grid-cols-1'} gap-1.5 mx-auto`}>
                       {/* Column 1 */}
                       <div className={`border ${isColorTheme ? 'border-[#153f74]' : 'border-black'} bg-white`}>
                         <table className="w-full text-left">
                           <thead>
                             <tr>
-                              <th className={`py-1 px-1.5 text-center w-8 border-r font-bold ${isColorTheme ? 'border-blue-900 text-white' : 'border-black text-black'}`} style={isColorTheme ? { backgroundColor: '#153f74', color: '#ffffff' } : {}}>S.No</th>
-                              <th className={`py-1 px-1.5 text-center border-r font-bold ${isColorTheme ? 'border-blue-900 text-white' : 'border-black text-black'}`} style={isColorTheme ? { backgroundColor: '#153f74', color: '#ffffff' } : {}}>Due Date</th>
-                              <th className={`py-1 px-1.5 text-center border-r font-bold ${isColorTheme ? 'border-blue-900 text-white' : 'border-black text-black'}`} style={isColorTheme ? { backgroundColor: '#153f74', color: '#ffffff' } : {}}>Principal</th>
-                              <th className={`py-1 px-1.5 text-center font-bold ${isColorTheme ? 'text-white' : 'text-black'}`} style={isColorTheme ? { backgroundColor: '#153f74', color: '#ffffff' } : {}}>EMI</th>
+                              <th className={`py-0.5 px-1 text-center w-7 border-r font-bold ${isColorTheme ? 'border-blue-900 text-white' : 'border-black text-black'}`} style={isColorTheme ? { backgroundColor: '#153f74', color: '#ffffff' } : {}}>S.No</th>
+                              <th className={`py-0.5 px-1 text-center border-r font-bold ${isColorTheme ? 'border-blue-900 text-white' : 'border-black text-black'}`} style={isColorTheme ? { backgroundColor: '#153f74', color: '#ffffff' } : {}}>Due Date</th>
+                              <th className={`py-0.5 px-1 text-center border-r font-bold ${isColorTheme ? 'border-blue-900 text-white' : 'border-black text-black'}`} style={isColorTheme ? { backgroundColor: '#153f74', color: '#ffffff' } : {}}>Principal</th>
+                              <th className={`py-0.5 px-1 text-center font-bold ${isColorTheme ? 'text-white' : 'text-black'}`} style={isColorTheme ? { backgroundColor: '#153f74', color: '#ffffff' } : {}}>EMI</th>
                             </tr>
                           </thead>
                           <tbody>
                             {col1.map((item, idx) => (
                               <tr key={idx} className="bg-white border-b border-gray-300">
-                                <td className="py-1 px-1.5 text-center font-bold text-black border-r border-gray-300">{item.installment}</td>
-                                <td className="py-1 px-1.5 text-center font-semibold text-black border-r border-gray-300">{item.dueDate}</td>
-                                <td className="py-1 px-1.5 text-center font-bold text-black border-r border-gray-300">₹ {Math.round(item.principal).toLocaleString('en-IN')}</td>
-                                <td className="py-1 px-1.5 text-center font-bold text-black">₹ {Math.round(item.amount).toLocaleString('en-IN')}</td>
+                                <td className="py-0.5 px-1 text-center font-bold text-black border-r border-gray-300">{item.installment}</td>
+                                <td className="py-0.5 px-1 text-center font-semibold text-black border-r border-gray-300">{item.dueDate}</td>
+                                <td className="py-0.5 px-1 text-center font-bold text-black border-r border-gray-300">₹ {Math.round(item.principal).toLocaleString('en-IN')}</td>
+                                <td className="py-0.5 px-1 text-center font-bold text-black">₹ {Math.round(item.amount).toLocaleString('en-IN')}</td>
                               </tr>
                             ))}
                           </tbody>
@@ -688,19 +918,19 @@ export default function EmiCalculator() {
                           <table className="w-full text-left">
                             <thead>
                               <tr>
-                                <th className={`py-1 px-1.5 text-center w-8 border-r font-bold ${isColorTheme ? 'border-blue-900 text-white' : 'border-black text-black'}`} style={isColorTheme ? { backgroundColor: '#153f74', color: '#ffffff' } : {}}>S.No</th>
-                                <th className={`py-1 px-1.5 text-center border-r font-bold ${isColorTheme ? 'border-blue-900 text-white' : 'border-black text-black'}`} style={isColorTheme ? { backgroundColor: '#153f74', color: '#ffffff' } : {}}>Due Date</th>
-                                <th className={`py-1 px-1.5 text-center border-r font-bold ${isColorTheme ? 'border-blue-900 text-white' : 'border-black text-black'}`} style={isColorTheme ? { backgroundColor: '#153f74', color: '#ffffff' } : {}}>Principal</th>
-                                <th className={`py-1 px-1.5 text-center font-bold ${isColorTheme ? 'text-white' : 'text-black'}`} style={isColorTheme ? { backgroundColor: '#153f74', color: '#ffffff' } : {}}>EMI</th>
+                                <th className={`py-0.5 px-1 text-center w-7 border-r font-bold ${isColorTheme ? 'border-blue-900 text-white' : 'border-black text-black'}`} style={isColorTheme ? { backgroundColor: '#153f74', color: '#ffffff' } : {}}>S.No</th>
+                                <th className={`py-0.5 px-1 text-center border-r font-bold ${isColorTheme ? 'border-blue-900 text-white' : 'border-black text-black'}`} style={isColorTheme ? { backgroundColor: '#153f74', color: '#ffffff' } : {}}>Due Date</th>
+                                <th className={`py-0.5 px-1 text-center border-r font-bold ${isColorTheme ? 'border-blue-900 text-white' : 'border-black text-black'}`} style={isColorTheme ? { backgroundColor: '#153f74', color: '#ffffff' } : {}}>Principal</th>
+                                <th className={`py-0.5 px-1 text-center font-bold ${isColorTheme ? 'text-white' : 'text-black'}`} style={isColorTheme ? { backgroundColor: '#153f74', color: '#ffffff' } : {}}>EMI</th>
                               </tr>
                             </thead>
                             <tbody>
                               {col2.map((item, idx) => (
                                 <tr key={chunkSize + idx} className="bg-white border-b border-gray-300">
-                                  <td className="py-1 px-1.5 text-center font-bold text-black border-r border-gray-300">{item.installment}</td>
-                                  <td className="py-1 px-1.5 text-center font-semibold text-black border-r border-gray-300">{item.dueDate}</td>
-                                  <td className="py-1 px-1.5 text-center font-bold text-black border-r border-gray-300">₹ {Math.round(item.principal).toLocaleString('en-IN')}</td>
-                                  <td className="py-1 px-1.5 text-center font-bold text-black">₹ {Math.round(item.amount).toLocaleString('en-IN')}</td>
+                                  <td className="py-0.5 px-1 text-center font-bold text-black border-r border-gray-300">{item.installment}</td>
+                                  <td className="py-0.5 px-1 text-center font-semibold text-black border-r border-gray-300">{item.dueDate}</td>
+                                  <td className="py-0.5 px-1 text-center font-bold text-black border-r border-gray-300">₹ {Math.round(item.principal).toLocaleString('en-IN')}</td>
+                                  <td className="py-0.5 px-1 text-center font-bold text-black">₹ {Math.round(item.amount).toLocaleString('en-IN')}</td>
                                 </tr>
                               ))}
                             </tbody>
@@ -708,267 +938,124 @@ export default function EmiCalculator() {
                         </div>
                       )}
                     </div>
-                  )}
-                </div>
+                  </div>
 
-                {/* Total Summary Bar */}
-                {totalItems > 0 && (
-                  <div 
-                    className={`border py-1.5 px-3 flex justify-between items-center text-xs font-black ${isColorTheme ? 'bg-[#153f74] text-white border-[#153f74]' : 'bg-white text-black border-black'}`}
+                  {/* Total Summary Bar */}
+                  <div
+                    className={`border mt-1 py-1 px-3 flex justify-between items-center text-xs font-black ${isColorTheme ? 'bg-[#153f74] text-white border-[#153f74]' : 'bg-white text-black border-black'}`}
                     style={isColorTheme ? { backgroundColor: '#153f74', WebkitPrintColorAdjust: 'exact', printColorAdjust: 'exact' } : {}}
                   >
                     <span><u>Total Payable</u></span>
-                    <div className="flex gap-12">
+                    <div className="flex gap-8">
                       <span>Principal: <strong>₹ {principal.toLocaleString('en-IN')}</strong></span>
                       <span>EMI: <strong>₹ {totalPayment.toLocaleString('en-IN')}</strong></span>
                     </div>
                   </div>
-                )}
 
-                {/* Instructions & Guidelines in Lower Part */}
-                <div className={`instructions-section space-y-1 p-2 border text-black ${isColorTheme ? 'bg-gray-50 border-gray-300' : 'bg-white border-black'}`} style={isColorTheme ? { backgroundColor: '#f9fafb', WebkitPrintColorAdjust: 'exact', printColorAdjust: 'exact' } : {}}>
-                  <p className="font-black uppercase tracking-wider text-black underline">
-                    Instructions & Finance Guidelines / <span className="telugu-text font-bold">నిబంధనలు మరియు మార్గదర్శకాలు</span>
-                  </p>
-                  <ol className="list-decimal list-outside pl-4 space-y-1 font-medium leading-tight">
-                    <div>
-                      The device given in finance are only for consumer use and <u>only the customer is responsible</u> for loan amount, charges and emi's.<br />
-                      <span className="telugu-text text-black font-semibold">ఫైనాన్స్‌లో ఇవ్వబడిన పరికరం కేవలం వినియోగదారుల వినియోగం కోసం మాత్రమే మరియు <u>లోన్ మొత్తం, ఛార్జీలు మరియు ఈఎంఐలకు కస్టమర్ మాత్రమే బాధ్యత వహిస్తారు.</u></span>
+                  {/* Instructions & Guidelines in Lower Part */}
+                  <div className={`instructions-section space-y-1 p-2 border text-black ${isColorTheme ? 'bg-gray-50 border-gray-300' : 'bg-white border-black'}`} style={isColorTheme ? { backgroundColor: '#f9fafb', WebkitPrintColorAdjust: 'exact', printColorAdjust: 'exact' } : {}}>
+                    <p className="font-black uppercase tracking-wider text-black underline">
+                      Instructions &amp; Finance Guidelines / <span className="telugu-text font-bold">నిబంధనలు మరియు మార్గదర్శకాలు</span>
+                    </p>
+                    <ol className="list-decimal list-outside pl-4 space-y-2 font-medium leading-tight">
+                      <div>
+                        The device given in finance are only for consumer use and <u>only the customer is responsible</u> for loan amount, charges and emi&apos;s.<br />
+                        <span className="telugu-text text-black font-semibold">ఫైనాన్స్‌లో ఇవ్వబడిన పరికరం కేవలం వినియోగదారుల వినియోగం కోసం మాత్రమే మరియు <u>లోన్ మొత్తం, ఛార్జీలు మరియు ఈఎంఐలకు కస్టమర్ మాత్రమే బాధ్యత వహిస్తారు.</u></span>
+                      </div>
+                      <div>
+                        <strong><u>Keep amount in account before 4th of every month.</u></strong> Otherwise <strong className="underline">Rs.649/-</strong> charges should be paid extra to unlock the device. And bank may incur charges according to their own policies.<br />
+                        <span className="telugu-text text-black font-semibold"><u>ప్రతి నెలా 4వ తేదీకి ముందే ఖాతాలో తగిన మొత్తం ఉంచండి.</u> లేదంటే పరికరాన్ని అన్‌లాక్ చేయడానికి <u>రూ. 649/-</u> అదనంగా చెల్లించాలి. మరియు బ్యాంక్ నిబంధనల ప్రకారం అదనపు ఛార్జీలు పడవచ్చు.</span>
+                      </div>
+                      <div>
+                        Prevent double deductions by making payment online as an <i>advance EMI</i> before 7 days of the due date (which is by the 28th of the previous month).<br />
+                        <span className="telugu-text text-black font-semibold">డబుల్ డిడక్షన్ (రెండుసార్లు కట్ కావడం) నివారించడానికి, గడువు తేదీకి 7 రోజుల ముందే (అంటే మునుపటి నెల 28వ తేదీ నాటికి) <i>ఆన్‌లైన్‌లో అడ్వాన్స్ EMI</i> చెల్లించండి.</span>
+                      </div>
+                      <div>
+                        The device financed in Chola comes with a <u>locking mechanism</u>. If there is pending due; the functions in device will be locked and they are only retrieved only after clearing the pending dues.<br />
+                        <span className="telugu-text text-black font-semibold">చోళాలో ఫైనాన్స్ చేయబడిన పరికరం <u>లాకింగ్ మెకానిజంతో</u> వస్తుంది. బకాయి ఉంటే పరికరంలోని ఫంక్షన్‌లు లాక్ చేయబడతాయి మరియు బకాయిలన్నీ చెల్లించిన తర్వాత మాత్రమే అన్‌లాక్ చేయబడతాయి.</span>
+                      </div>
+                      <div>
+                        Chola is not responsible for any kind of theft and losing of product, and <i>the emis are not meant to be skipped</i>.<br />
+                        <span className="telugu-text text-black font-semibold">ఉత్పత్తి దొంగతనానికి లేదా పోగొట్టుకోవడానికి చోళా బాధ్యత వహించదు, మరియు <i>ఈఎంఐలను ఎట్టి పరిస్థితుల్లోనూ ఆపివేయడానికి వీలులేదు.</i></span>
+                      </div>
+                    </ol>
+                  </div>
+
+                  {/* Conditional Device Insurance / Uninsured Policy Box */}
+                  {isDeviceInsurance ? (
+                    <div className={`insurance-policy-box p-2 border flex justify-between items-center gap-2 ${isColorTheme ? 'bg-blue-50 border-blue-300 text-blue-950' : 'bg-white border-black text-black'}`} style={isColorTheme ? { backgroundColor: '#eff6ff', WebkitPrintColorAdjust: 'exact', printColorAdjust: 'exact' } : {}}>
+                      <div className="space-y-0.5 flex-1">
+                        <p className={`font-black uppercase tracking-wider underline flex items-center gap-1 ${isColorTheme ? 'text-blue-950' : 'text-black'}`}>
+                          <ShieldAlert className="w-3.5 h-3.5 shrink-0" />
+                          Device Insurance Policy (ACKO Mobile Insurance) <span className="telugu-text font-bold">మొబైల్ ఇన్సూరెన్స్ సమాచారం</span>
+                        </p>
+                        <ul className="list-disc list-outside pl-4 space-y-0.5 font-medium leading-tight">
+                          <li>
+                            This device is secured by ACKO mobile insurance, which can be claimed for accidental damage and liquid damage.<br />
+                            <span className="telugu-text font-semibold">ఈ పరికరం ACKO మొబైల్ ఇన్సూరెన్స్ ద్వారా రక్షించబడింది, దీనిని యాక్సిడెంటల్ డ్యామేజ్ మరియు లిక్విడ్ డ్యామేజ్ కోసం క్లెయిమ్ చేయవచ్చు.</span>
+                          </li>
+                          <li>
+                            <strong><u>Strict Note:</u></strong> This plan <i>cannot be claimed for Theft cases</i> under any circumstances.<br />
+                            <span className="telugu-text font-semibold"><u>గమనిక:</u> దొంగతనం (Theft) కేసులకు ఈ ప్లాన్ <i>వర్తించదు.</i></span>
+                          </li>
+                          <li>
+                            Insurance coverage is valid for <strong>1 year</strong> and can be claimed for <strong>once</strong> only.<br />
+                            <span className="telugu-text font-semibold">ఈ ఇన్సూరెన్స్ <strong>1 సంవత్సరం</strong> వరకు మరియు కేవలం <strong>ఒకసారి</strong> మాత్రమే క్లెయిమ్ చేయడానికి చెల్లుబాటు అవుతుంది.</span>
+                          </li>
+                          <li>
+                            Insurance coverage gets completely void if the device is repaired at any service center other than an authorized service center.<br />
+                            <span className="telugu-text font-semibold">అధికారిక సర్వీస్ సెంటర్ కాకుండా ఇతర సెంటర్లలో రిపేర్ చేస్తే ఇన్సూరెన్స్ వర్తించదు.</span>
+                          </li>
+                        </ul>
+                      </div>
+                      {/* ACKO App QR Code */}
+                      <div className="bg-white p-1 rounded border border-black shrink-0 flex flex-col items-center justify-center text-center" style={{ backgroundColor: '#ffffff', WebkitPrintColorAdjust: 'exact', printColorAdjust: 'exact' }}>
+                        <img
+                          src={`https://api.qrserver.com/v1/create-qr-code/?size=180x180&data=${encodeURIComponent("https://play.google.com/store/apps/details?id=com.acko.android")}`}
+                          alt="ACKO App QR"
+                          crossOrigin="anonymous"
+                          className="w-[72px] h-[72px] block"
+                        />
+                        <span className="text-[9px] font-extrabold text-black mt-0.5 leading-none">ACKO App</span>
+                      </div>
                     </div>
-                    <div>
-                      <strong><u>Keep amount in account before 4th of every month.</u></strong> Otherwise <strong className="underline">Rs.649/-</strong> charges should be paid extra to unlock the device. And bank may incur charges according to their own policies.<br />
-                      <span className="telugu-text text-black font-semibold"><u>ప్రతి నెలా 4వ తేదీకి ముందే ఖాతాలో తగిన మొత్తం ఉంచండి.</u> లేదంటే పరికరాన్ని అన్‌లాక్ చేయడానికి <u>రూ. 649/-</u> అదనంగా చెల్లించాలి. మరియు బ్యాంక్ నిబంధనల ప్రకారం అదనపు ఛార్జీలు పడవచ్చు.</span>
+                  ) : (
+                    <div className={`insurance-policy-box p-2 border flex items-start gap-1.5 ${isColorTheme ? 'bg-red-50 border-red-300 text-red-950' : 'bg-white border-black text-black'}`} style={isColorTheme ? { backgroundColor: '#fef2f2', WebkitPrintColorAdjust: 'exact', printColorAdjust: 'exact' } : {}}>
+                      <ShieldAlert className="w-3.5 h-3.5 shrink-0 mt-0.5" />
+                      <div className="space-y-0.5">
+                        <p className="font-bold uppercase tracking-wider underline">
+                          Insurance Status: Not Insured / <span className="telugu-text font-bold">బీమా స్థితి: బీమా లేదు</span>
+                        </p>
+                        <p className="font-medium">
+                          <i>The financed device is not insured and not covered by policy.</i><br />
+                          <span className="telugu-text font-semibold"><i>ఫైనాన్స్ చేయబడిన పరికరానికి ఎలాంటి ఇన్సూరెన్స్ లేదా పాలసీ వర్తించదు.</i></span>
+                        </p>
+                      </div>
                     </div>
-                    <div>
-                      Prevent double deductions by making payment online as an <i>advance EMI</i> before 7 days of the due date (which is by the 28th of the previous month).<br />
-                      <span className="telugu-text text-black font-semibold">డబుల్ డిడక్షన్ (రెండుసార్లు కట్ కావడం) నివారించడానికి, గడువు తేదీకి 7 రోజుల ముందే (అంటే మునుపటి నెల 28వ తేదీ నాటికి) <i>ఆన్‌లైన్‌లో అడ్వాన్స్ EMI</i> చెల్లించండి.</span>
-                    </div>
-                    <div>
-                      The device financed in Chola comes with a <u>locking mechanism</u>. If there is pending due; the functions in device will be locked and they are only retrieved only after clearing the pending dues.<br />
-                      <span className="telugu-text text-black font-semibold">చోళాలో ఫైనాన్స్ చేయబడిన పరికరం <u>లాకింగ్ మెకానిజంతో</u> వస్తుంది. బకాయి ఉంటే పరికరంలోని ఫంక్షన్‌లు లాక్ చేయబడతాయి మరియు బకాయిలన్నీ చెల్లించిన తర్వాత మాత్రమే అన్‌లాక్ చేయబడతాయి.</span>
-                    </div>
-                    <div>
-                      Chola is not responsible for any kind of theft and losing of product, and <i>the emis are not meant to be skipped</i>.<br />
-                      <span className="telugu-text text-black font-semibold">ఉత్పత్తి దొంగతనానికి లేదా పోగొట్టుకోవడానికి చోళా బాధ్యత వహించదు, మరియు <i>ఈఎంఐలను ఎట్టి పరిస్థితుల్లోనూ ఆపివేయడానికి వీలులేదు.</i></span>
-                    </div>
-                  </ol>
+                  )}
                 </div>
 
-                {/* Conditional Device Insurance / Uninsured Policy Box */}
-                {isDeviceInsurance ? (
-                  <div className={`insurance-policy-box p-2 border flex justify-between items-center gap-2 ${isColorTheme ? 'bg-blue-50 border-blue-300 text-blue-950' : 'bg-white border-black text-black'}`} style={isColorTheme ? { backgroundColor: '#eff6ff', WebkitPrintColorAdjust: 'exact', printColorAdjust: 'exact' } : {}}>
-                    <div className="space-y-0.5 flex-1">
-                      <p className={`font-black uppercase tracking-wider underline flex items-center gap-1 ${isColorTheme ? 'text-blue-950' : 'text-black'}`}>
-                        <ShieldAlert className="w-3.5 h-3.5 shrink-0" />
-                        Device Insurance Policy (ACKO Mobile Insurance) <span className="telugu-text font-bold">మొబైల్ ఇన్సూరెన్స్ సమాచారం</span>
-                      </p>
-                      <ul className="list-disc list-outside pl-4 space-y-0.5 font-medium leading-tight">
-                        <li>
-                          This device is secured by ACKO mobile insurance, which can be claimed for accidental damage and liquid damage.<br />
-                          <span className="telugu-text font-semibold">ఈ పరికరం ACKO మొబైల్ ఇన్సూరెన్స్ ద్వారా రక్షించబడింది, దీనిని యాక్సిడెంటల్ డ్యామేజ్ మరియు లిక్విడ్ డ్యామేజ్ కోసం క్లెయిమ్ చేయవచ్చు.</span>
-                        </li>
-                        <li>
-                          <strong><u>Strict Note:</u></strong> This plan <i>cannot be claimed for Theft cases</i> under any circumstances.<br />
-                          <span className="telugu-text font-semibold"><u>గమనిక:</u> దొంగతనం (Theft) కేసులకు ఈ ప్లాన్ <i>వర్తించదు.</i></span>
-                        </li>
-                        <li>
-                          Insurance coverage is valid for <strong>1 year</strong> and can be claimed for <strong>once</strong> only.<br />
-                          <span className="telugu-text font-semibold">ఈ ఇన్సూరెన్స్ <strong>1 సంవత్సరం</strong> వరకు మరియు కేవలం <strong>ఒకసారి</strong> మాత్రమే క్లెయిమ్ చేయడానికి చెల్లుబాటు అవుతుంది.</span>
-                        </li>
-                        <li>
-                          Insurance coverage gets completely void if the device is repaired at any service center other than an authorized service center.<br />
-                          <span className="telugu-text font-semibold">అధికారిక సర్వీస్ సెంటర్ కాకుండా ఇతర సెంటర్లలో రిపేర్ చేస్తే ఇన్సూరెన్స్ వర్తించదు.</span>
-                        </li>
-                      </ul>
-                    </div>
-                    {/* ACKO App QR Code */}
-                    <div className="bg-white p-1 rounded border border-black shrink-0 flex flex-col items-center justify-center text-center" style={{ backgroundColor: '#ffffff', WebkitPrintColorAdjust: 'exact', printColorAdjust: 'exact' }}>
-                      <img 
-                        src={`https://api.qrserver.com/v1/create-qr-code/?size=120x120&data=${encodeURIComponent("https://play.google.com/store/apps/details?id=com.acko.android")}`} 
-                        alt="ACKO App QR" 
-                        className="w-[60px] h-[60px] block"
-                      />
-                      <span className="text-[8.5px] font-extrabold text-black mt-0.5 leading-none">ACKO App</span>
-                    </div>
-                  </div>
-                ) : (
-                  <div className={`insurance-policy-box p-2 border flex items-start gap-1.5 ${isColorTheme ? 'bg-red-50 border-red-300 text-red-950' : 'bg-white border-black text-black'}`} style={isColorTheme ? { backgroundColor: '#fef2f2', WebkitPrintColorAdjust: 'exact', printColorAdjust: 'exact' } : {}}>
-                    <ShieldAlert className="w-3.5 h-3.5 shrink-0 mt-0.5" />
-                    <div className="space-y-0.5">
-                      <p className="font-bold uppercase tracking-wider underline">
-                        Insurance Status: Not Insured / <span className="telugu-text font-bold">బీమా స్థితి: బీమా లేదు</span>
-                      </p>
-                      <p className="font-medium">
-                        <i>The financed device is not insured and not covered by policy.</i><br />
-                        <span className="telugu-text font-semibold"><i>ఫైనాన్స్ చేయబడిన పరికరానికి ఎలాంటి ఇన్సూరెన్స్ లేదా పాలసీ వర్తించదు.</i></span>
-                      </p>
-                    </div>
-                  </div>
-                )}
-              </div>
-
-              {/* Notice Footer Only */}
-              <div className="notice-footer space-y-1 pt-1 border-t border-black">
-                {totalItems > 0 && (
-                  <div className={`notice-content p-1.5 border flex items-start gap-1.5 ${isColorTheme ? 'bg-amber-50 border-amber-300 text-amber-950' : 'bg-white border-black text-black'}`} style={isColorTheme ? { backgroundColor: '#fffbeb', WebkitPrintColorAdjust: 'exact', printColorAdjust: 'exact' } : {}}>
-                    <AlertCircle className="h-4 w-4 shrink-0 mt-0.5" />
-                    <div className="space-y-0.5">
+                {/* Notice Footer Only */}
+                <div className="notice-footer space-y-1 pt-0.5 border-t border-black mt-auto">
+                  <div className={`notice-content p-1 border flex items-start gap-1 ${isColorTheme ? 'bg-amber-50 border-amber-300 text-amber-950' : 'bg-white border-black text-black'}`} style={isColorTheme ? { backgroundColor: '#fffbeb', WebkitPrintColorAdjust: 'exact', printColorAdjust: 'exact' } : {}}>
+                    <AlertCircle className="h-3 w-3 shrink-0 mt-0.5" />
+                    <div className="space-y-0.5 text-[11px]">
                       <p>
                         <strong><u>Important Notice:</u></strong> Ensure funds are deposited before the <strong>4th of every month</strong> to prevent automatic device locking and <u>Rs. 649/-</u> unlock penalty charges.
                       </p>
-                      <p className="telugu-text font-semibold italic">
-                        గమనిక: పరికరం ఆటోమేటిక్ లాక్ కాకుండా మరియు <u>రూ. 649/- జరిమానా</u> పడకుండా ఉండాలంటే ప్రతి నెలా <strong>4వ తేదీకి ముందే</strong> నిధులను జమ చేయండి.
-                      </p>
                     </div>
                   </div>
-                )}
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* Minimal Floating Dialog Modal for Options / Parameters */}
-      {isOptionsOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4 animate-in fade-in">
-          <div className="bg-white border border-gray-400 shadow-2xl max-w-sm w-full p-4 space-y-3 overflow-hidden animate-in zoom-in-95 text-xs">
-            <div className="flex items-center justify-between border-b border-gray-300 pb-2">
-              <h3 className="font-bold text-gray-900 flex items-center gap-1.5">
-                <Sliders className="w-3.5 h-3.5 text-[#153f74]" />
-                Loan Parameters
-              </h3>
-              <button
-                onClick={() => setIsOptionsOpen(false)}
-                className="p-1 rounded text-gray-600 hover:bg-gray-100 cursor-pointer"
-              >
-                <X className="w-3.5 h-3.5" />
-              </button>
-            </div>
-
-            <div className="space-y-2.5">
-              <div className="space-y-0.5">
-                <label className="font-medium text-gray-800">Loan Number</label>
-                <input
-                  type="text"
-                  placeholder="e.g. CHOLA12345678"
-                  value={loanNo}
-                  onChange={(e) => setLoanNo(e.target.value)}
-                  className="w-full px-2.5 py-1 bg-white border border-gray-400 rounded text-gray-900 focus:outline-none focus:ring-1 focus:ring-[#153f74]"
-                />
-              </div>
-
-              <div className="space-y-0.5">
-                <label className="font-medium text-gray-800">DO Date</label>
-                <input
-                  type="date"
-                  value={doDate}
-                  onChange={(e) => setDoDate(e.target.value)}
-                  className="w-full px-2.5 py-1 bg-white border border-gray-400 rounded text-gray-900 focus:outline-none focus:ring-1 focus:ring-[#153f74]"
-                />
-              </div>
-
-              <div className="space-y-0.5">
-                <label className="font-medium text-gray-800 flex justify-between">
-                  <span>Monthly EMI Amount</span>
-                  <span className="font-bold text-[#153f74]">₹{Number(emi || 0).toLocaleString('en-IN')}</span>
-                </label>
-                <div className="relative">
-                  <span className="absolute inset-y-0 left-0 pl-2 flex items-center text-gray-500 text-xs">₹</span>
-                  <input
-                    type="number"
-                    min="0"
-                    step="500"
-                    placeholder="e.g. 4014"
-                    value={emi}
-                    onWheel={(e) => e.target.blur()}
-                    onChange={(e) => setEmi(e.target.value === "" ? "" : Math.max(0, Number(e.target.value)))}
-                    className="w-full pl-6 pr-2.5 py-1 bg-white border border-gray-400 rounded text-gray-900 focus:outline-none focus:ring-1 focus:ring-[#153f74]"
-                  />
                 </div>
               </div>
-
-              <div className="space-y-0.5">
-                <label className="font-medium text-gray-800 flex justify-between">
-                  <span>Tenure (Months, Max 24)</span>
-                  <span className="font-bold text-[#153f74]">{tenureMonths ? `${tenureMonths} Months` : 'Enter months'}</span>
-                </label>
-                <input
-                  type="number"
-                  min="1"
-                  max="24"
-                  step="1"
-                  placeholder="e.g. 7"
-                  value={tenureMonths}
-                  onWheel={(e) => e.target.blur()}
-                  onChange={(e) => {
-                    const val = e.target.value === "" ? "" : Math.min(24, Math.max(0, Number(e.target.value)));
-                    setTenureMonths(val);
-                  }}
-                  className="w-full px-2.5 py-1 bg-white border border-gray-400 rounded text-gray-900 focus:outline-none focus:ring-1 focus:ring-[#153f74]"
-                />
-              </div>
-
-              {/* Theme Toggle in Options */}
-              <div className="flex items-center gap-1.5 pt-0.5">
-                <input
-                  type="checkbox"
-                  id="options-color-theme"
-                  checked={isColorTheme}
-                  onChange={(e) => setIsColorTheme(e.target.checked)}
-                  className="w-3.5 h-3.5 text-[#153f74] accent-[#153f74] rounded border-gray-400 cursor-pointer"
-                />
-                <label htmlFor="options-color-theme" className="font-medium text-gray-800 cursor-pointer select-none flex items-center gap-1">
-                  <Palette className="w-3 h-3 text-[#153f74]" /> Use Color Theme (Uncheck for Grey)
-                </label>
-              </div>
-
-              {/* Device Insurance Checkbox */}
-              <div className="flex items-center gap-1.5 pt-0.5">
-                <input
-                  type="checkbox"
-                  id="options-insurance"
-                  checked={isDeviceInsurance}
-                  onChange={(e) => setIsDeviceInsurance(e.target.checked)}
-                  className="w-3.5 h-3.5 text-[#153f74] accent-[#153f74] rounded border-gray-400 cursor-pointer"
-                />
-                <label htmlFor="options-insurance" className="font-medium text-gray-800 cursor-pointer select-none">
-                  Is Device Insurance Available
-                </label>
-              </div>
-            </div>
-
-            <div className="pt-2 border-t border-gray-300 flex gap-2">
-              <button
-                onClick={handleDownloadPdf}
-                disabled={isPdfDownloading}
-                className="flex-1 py-1.5 bg-secondary text-secondary-foreground font-bold rounded hover:bg-secondary/85 cursor-pointer flex items-center justify-center gap-1 text-[11px]"
-              >
-                <FileText className="w-3.5 h-3.5 text-[#153f74]" />
-                {isPdfDownloading ? "PDF..." : "PDF"}
-              </button>
-              <button
-                onClick={handleDownloadJpg}
-                disabled={isDownloading}
-                className="flex-1 py-1.5 bg-secondary text-secondary-foreground font-bold rounded hover:bg-secondary/85 cursor-pointer flex items-center justify-center gap-1 text-[11px]"
-              >
-                <Download className="w-3.5 h-3.5 text-[#153f74]" />
-                {isDownloading ? "JPG..." : "JPG"}
-              </button>
-              <button
-                onClick={() => setIsOptionsOpen(false)}
-                className="flex-1 py-1.5 bg-[#153f74] text-white font-bold rounded hover:bg-[#0d2a4e] cursor-pointer"
-              >
-                Apply
-              </button>
             </div>
           </div>
         </div>
-      )}
+      ) : null}
 
       {/* Settings Modal */}
       {isSettingsOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4">
-          <div className="bg-white border border-gray-400 shadow-xl max-w-sm w-full p-4 space-y-3 overflow-hidden animate-in fade-in zoom-in-95 text-xs">
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4 overflow-y-auto">
+          <div className="bg-white border border-gray-400 shadow-xl max-w-sm w-full p-4 space-y-3 overflow-y-auto max-h-[90vh] animate-in fade-in zoom-in-95 text-xs">
             <div className="flex items-center justify-between border-b border-gray-300 pb-2">
               <h3 className="font-bold text-gray-900 flex items-center gap-1.5">
                 <Settings className="w-3.5 h-3.5 text-[#153f74]" />

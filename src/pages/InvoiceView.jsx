@@ -6,7 +6,6 @@ import { Invoice } from "@/api/invoices";
 import { VendorProfile } from "@/api/vendorProfiles";
 import { Button } from "@/components/ui/button";
 import {
-  Printer,
   ArrowLeft,
   Download,
   Trash2,
@@ -17,10 +16,14 @@ import {
   Loader2,
   AlertCircle,
   Share2,
+  Edit3,
+  Calculator,
+  Printer,
 } from "lucide-react";
 import InvoiceTemplate from "@/components/invoice/InvoiceTemplate";
 import html2canvas from "html2canvas";
 import jspdf from "jspdf";
+import { Capacitor } from "@capacitor/core";
 import { toast } from "sonner";
 import { Filesystem, Directory } from "@capacitor/filesystem";
 import { Share } from "@capacitor/share";
@@ -35,8 +38,83 @@ import {
   AlertDialogTitle,
   AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogFooter,
+} from "@/components/ui/dialog";
 
 const INVOICE_NATURAL_WIDTH = 794;
+
+function calculateAckoPlan(price) {
+  const p = parseFloat(price) || 0;
+  if (p >= 10000 && p <= 15000) return { id: "acko_mobile", name: "ACKO ADLD MOBILE INSURANCE", amount: 999 };
+  if (p > 15000 && p <= 20000) return { id: "acko_mobile", name: "ACKO ADLD MOBILE INSURANCE", amount: 1399 };
+  if (p > 20000 && p <= 25000) return { id: "acko_mobile", name: "ACKO ADLD MOBILE INSURANCE", amount: 1799 };
+  if (p > 25000 && p <= 30000) return { id: "acko_mobile", name: "ACKO ADLD MOBILE INSURANCE", amount: 2199 };
+  if (p > 30000 && p <= 35000) return { id: "acko_mobile", name: "ACKO ADLD MOBILE INSURANCE", amount: 2499 };
+  if (p > 35000 && p <= 50000) return { id: "acko_mobile", name: "ACKO ADLD MOBILE INSURANCE", amount: 3299 };
+  if (p > 50000 && p <= 70000) return { id: "acko_mobile", name: "ACKO ADLD MOBILE INSURANCE", amount: 4699 };
+  if (p > 70000 && p <= 100000) return { id: "acko_mobile", name: "ACKO ADLD MOBILE INSURANCE", amount: 6599 };
+  if (p > 100000 && p <= 120000) return { id: "acko_mobile", name: "ACKO ADLD MOBILE INSURANCE", amount: 8499 };
+  if (p > 120000 && p <= 140000) return { id: "acko_mobile", name: "ACKO ADLD MOBILE INSURANCE", amount: 9999 };
+  if (p > 140000 && p <= 160000) return { id: "acko_mobile", name: "ACKO ADLD MOBILE INSURANCE", amount: 11599 };
+  if (p > 160000 && p <= 180000) return { id: "acko_mobile", name: "ACKO ADLD MOBILE INSURANCE", amount: 13099 };
+  if (p > 180000 && p <= 200000) return { id: "acko_mobile", name: "ACKO ADLD MOBILE INSURANCE", amount: 14599 };
+  return null;
+}
+
+const AVAILABLE_ADDONS = [
+  { id: "one_assist", name: "ONE ASSIST HOME ASSURE", amount: 1099 },
+  { id: "anmol_xpress", name: "ANMOL XPRESS HEALTH", amount: 799 },
+  { id: "hdfc_suraksha", name: "HDFC LIFE JEEVAN SURAKSHA", amount: 745 },
+];
+
+function parseSchemeCode(scheme) {
+  const m = String(scheme || "").toUpperCase().match(/_(\d{2,4})$/);
+  if (!m) return null;
+  const total = parseInt(m[1].slice(0, -1), 10);
+  const advance = parseInt(m[1].slice(-1), 10);
+  const tenure = total - advance;
+  return tenure > 0 && tenure <= 36 ? { total, advance, tenure } : null;
+}
+
+function resolveTenure(invoice) {
+  const saved = Number(invoice?.tenure);
+  if (saved > 0) return saved;
+  const parsed = parseSchemeCode(invoice?.scheme_name);
+  return parsed ? parsed.tenure : 0;
+}
+
+async function saveToDownloadsFolder(fileName, base64Data) {
+  try {
+    if (Capacitor.getPlatform() === "android") {
+      const perm = await Filesystem.requestPermissions();
+      if (perm.publicStorage !== "granted") {
+        toast.error("Storage permission is required to save to Download/CM Invoice/.", {
+          duration: 8000,
+        });
+        return;
+      }
+    }
+
+    const relativePath = `Download/CM Invoice/${fileName}`;
+    await Filesystem.writeFile({
+      path: relativePath,
+      data: base64Data,
+      directory: Directory.ExternalStorage,
+      recursive: true,
+    });
+
+    toast.success(`Saved to ${relativePath}`, { duration: 5000 });
+  } catch (err) {
+    const msg = String(err?.message || err);
+    toast.error("Save failed: " + msg, { duration: 10000 });
+    throw err;
+  }
+}
 
 export default function InvoiceView() {
   const { id: invoiceId } = useParams();
@@ -49,8 +127,16 @@ export default function InvoiceView() {
   const [zoom, setZoom] = useState(1);
   const [isCapturing, setIsCapturing] = useState(false);
   const [loadTimedOut, setLoadTimedOut] = useState(false);
+  const [isEditDialogOpen, setIsEditDialogOpen] = useState(false);
 
-  // Exact width measurement function
+  // EMI & Tenure prompt modal states
+  const [isEmiModalOpen, setIsEmiModalOpen] = useState(false);
+  const [inputTenure, setInputTenure] = useState("");
+  const [inputNetLoan, setInputNetLoan] = useState("");
+
+  const [selectedAddons, setSelectedAddons] = useState([]);
+  const [insuranceEligible, setInsuranceEligible] = useState("Yes");
+
   const handleAutoFit = useCallback(() => {
     const el = containerNodeRef.current;
     if (!el) return;
@@ -89,13 +175,30 @@ export default function InvoiceView() {
   } = useQuery({
     queryKey: ["invoice", invoiceId],
     queryFn: async () => {
+      if (!invoiceId || invoiceId === "undefined" || invoiceId === "null") return null;
       const list = await Invoice.filter({ id: invoiceId });
       return list[0] || null;
     },
-    enabled: !!invoiceId,
+    enabled: !!invoiceId && invoiceId !== "undefined" && invoiceId !== "null",
     staleTime: 5 * 60 * 1000,
     refetchOnWindowFocus: false,
   });
+
+  useEffect(() => {
+    if (invoice) {
+      let initialList = [];
+      if (invoice.addons && Array.isArray(invoice.addons) && invoice.addons.length > 0) {
+        initialList = invoice.addons.map(a => a.id || a.name);
+      } else {
+        const hasAckoField = invoice.acko || invoice.has_acko || invoice.insurance_marked || invoice.product_price > 0;
+        if (hasAckoField) {
+          initialList.push("acko_mobile");
+        }
+      }
+      setSelectedAddons(initialList);
+      setInsuranceEligible(invoice.insurance_eligible !== undefined ? (invoice.insurance_eligible ? "Yes" : "No") : "Yes");
+    }
+  }, [invoice]);
 
   const {
     data: vendorFromDB,
@@ -118,7 +221,6 @@ export default function InvoiceView() {
 
   const isLoadingData = loadingInvoice || loadingVendor;
 
-  // Safety Timeout: Prevents permanent freeze if network/API hangs
   useEffect(() => {
     let timer;
     if (isLoadingData) {
@@ -155,6 +257,112 @@ export default function InvoiceView() {
     stamp_url: invoice?.vendor_stamp_url || vendorFromDB?.stamp_url || "",
   };
 
+  const productCost = Number(invoice?.product_price || invoice?.product_cost || invoice?.mrp || invoice?.loan_amount) || 0;
+  const calculatedAcko = calculateAckoPlan(productCost);
+  const loanNumber = invoice?.delivery_order_number || "";
+  const tenureMonths = resolveTenure(invoice);
+
+  const resolvedLoanAmount = Number(
+    invoice?.net_loan_amount ||
+    invoice?.loan_amount ||
+    invoice?.net_amount ||
+    invoice?.principal_amount ||
+    invoice?.product_price ||
+    invoice?.grand_total
+  ) || 0;
+
+  const selectedAddonsList = selectedAddons.map(id => {
+    if (id === "acko_mobile" && calculatedAcko && insuranceEligible === "Yes") return calculatedAcko;
+    if (id !== "acko_mobile") return AVAILABLE_ADDONS.find(a => a.id === id || a.name === id);
+    return null;
+  }).filter(Boolean);
+
+  const totalAddonsAmount = selectedAddonsList.reduce((sum, item) => sum + (Number(item?.amount) || 0), 0);
+  const totalLoanWithAddons = resolvedLoanAmount + totalAddonsAmount;
+
+  const handleOpenEmiCalculator = () => {
+    setInputTenure(tenureMonths ? String(tenureMonths) : "");
+    setInputNetLoan(totalLoanWithAddons ? String(totalLoanWithAddons) : "");
+    setIsEmiModalOpen(true);
+  };
+
+  const handleTenureChange = (value) => {
+    setInputTenure(value);
+  };
+
+  const handleConfirmEmiCalc = () => {
+    const t = Number(inputTenure);
+    const netLoan = Number(inputNetLoan);
+    if (!t || t <= 0) {
+      toast.error("Please enter a valid tenure in months.");
+      return;
+    }
+    if (!netLoan || netLoan <= 0) {
+      toast.error("Please enter a valid net loan amount.");
+      return;
+    }
+
+    setIsEmiModalOpen(false);
+
+    const resolvedAddonsList = selectedAddons.map(id => {
+      if (id === "acko_mobile" && calculatedAcko && insuranceEligible === "Yes") return calculatedAcko;
+      if (id !== "acko_mobile") return AVAILABLE_ADDONS.find(a => a.id === id || a.name === id);
+      return null;
+    }).filter(Boolean);
+
+    const computedEmi = Math.ceil(netLoan / t);
+
+    navigate("/emi-calculator", {
+      state: {
+        loanNumber: loanNumber,
+        tenure: t,
+        loanAmount: resolvedLoanAmount,
+        productCost: productCost,
+        addonsAmount: totalAddonsAmount,
+        totalPrincipal: netLoan,
+        emi: computedEmi,
+        selectedAddons: insuranceEligible === "Yes" ? selectedAddons : selectedAddons.filter(id => id !== "acko_mobile"),
+        addons: resolvedAddonsList,
+        hasAcko: insuranceEligible === "Yes" && selectedAddons.includes("acko_mobile"),
+        doDate: invoice?.invoice_date || invoice?.created_date || "",
+      },
+    });
+  };
+
+  const toggleAddonSelection = (addonId) => {
+    setSelectedAddons(prev =>
+      prev.includes(addonId) ? prev.filter(id => id !== addonId) : [...prev, addonId]
+    );
+  };
+
+  const updateAddonsMutation = useMutation({
+    mutationFn: async (updatedAddonsList) => {
+      return Invoice.update(invoiceId, {
+        addons: updatedAddonsList,
+        insurance_eligible: insuranceEligible === "Yes"
+      });
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["invoice", invoiceId] });
+      queryClient.invalidateQueries({ queryKey: ["invoices"] });
+      toast.success("Add-ons & Insurance Eligibility updated successfully!");
+      setIsEditDialogOpen(false);
+    },
+    onError: (err) => {
+      toast.error("Failed to update add-ons: " + err.message);
+    },
+  });
+
+  const handleSaveAddons = () => {
+    const finalAddonsList = selectedAddons.map(id => {
+      if (id === "acko_mobile" && calculatedAcko && insuranceEligible === "Yes") return calculatedAcko;
+      if (id !== "acko_mobile") return AVAILABLE_ADDONS.find(a => a.id === id || a.name === id);
+      return null;
+    }).filter(Boolean);
+
+    updateAddonsMutation.mutate(finalAddonsList);
+  };
+
   const captureFullInvoice = async (options = {}) => {
     const el = invoiceRef.current;
     if (!el) return null;
@@ -184,6 +392,15 @@ export default function InvoiceView() {
     }
   };
 
+  const handlePrint = () => {
+    try {
+      window.print();
+    } catch (err) {
+      console.error("Print failed:", err);
+      toast.error("Unable to trigger print");
+    }
+  };
+
   const handleDownloadPDF = async () => {
     if (!invoiceRef.current) return;
     setIsCapturing(true);
@@ -195,28 +412,17 @@ export default function InvoiceView() {
       const pdfWidth = pdf.internal.pageSize.getWidth();
       const pdfHeight = (canvas.height * pdfWidth) / canvas.width;
       pdf.addImage(imgData, "PNG", 0, 0, pdfWidth, pdfHeight);
-
       const fileName = `${invoice?.invoice_number || "invoice"}.pdf`;
 
-      if (window.location.protocol === "capacitor:") {
+      if (Capacitor.isNativePlatform()) {
         const pdfBase64 = pdf.output("datauristring").split(",")[1];
-        const savedFile = await Filesystem.writeFile({
-          path: fileName,
-          data: pdfBase64,
-          directory: Directory.Documents,
-        });
-        await Share.share({
-          title: "Invoice PDF",
-          url: savedFile.uri,
-          dialogTitle: "Save or Share Invoice",
-        });
-        toast.success("PDF saved & ready to share!");
+        await saveToDownloadsFolder(fileName, pdfBase64);
       } else {
         pdf.save(fileName);
         toast.success("PDF downloaded");
       }
     } catch (err) {
-      toast.error("Failed to save PDF: " + err.message);
+      toast.error("Failed to save PDF: " + err.message, { duration: 10000 });
     } finally {
       setIsCapturing(false);
     }
@@ -231,18 +437,8 @@ export default function InvoiceView() {
       const fileName = `${invoice?.invoice_number || "invoice"}.jpg`;
       const base64Data = canvas.toDataURL("image/jpeg", 0.95).split(",")[1];
 
-      if (window.location.protocol === "capacitor:") {
-        const savedFile = await Filesystem.writeFile({
-          path: fileName,
-          data: base64Data,
-          directory: Directory.Documents,
-        });
-        await Share.share({
-          title: "Invoice JPG",
-          url: savedFile.uri,
-          dialogTitle: "Save or Share Invoice",
-        });
-        toast.success("JPG saved & ready to share!");
+      if (Capacitor.isNativePlatform()) {
+        await saveToDownloadsFolder(fileName, base64Data);
       } else {
         const link = document.createElement("a");
         link.download = fileName;
@@ -251,7 +447,7 @@ export default function InvoiceView() {
         toast.success("JPG downloaded");
       }
     } catch (err) {
-      toast.error("Failed to save JPG: " + err.message);
+      toast.error("Failed to save JPG: " + err.message, { duration: 10000 });
     } finally {
       setIsCapturing(false);
     }
@@ -260,28 +456,54 @@ export default function InvoiceView() {
   const handleNativeShare = async () => {
     if (!invoiceRef.current) return;
     setIsCapturing(true);
+    const toastId = toast.loading("Preparing invoice for sharing...");
     try {
       const canvas = await captureFullInvoice({ backgroundColor: "#ffffff" });
       if (!canvas) return;
-      const base64Data = canvas.toDataURL("image/jpeg", 0.95).split(",")[1];
+      const base64Data = canvas.toDataURL("image/jpeg", 0.95);
       const fileName = `Invoice_${invoice?.invoice_number || "share"}.jpg`;
 
-      if (window.location.protocol === "capacitor:") {
+      if (Capacitor.isNativePlatform()) {
         const savedFile = await Filesystem.writeFile({
           path: fileName,
-          data: base64Data,
+          data: base64Data.split(",")[1],
           directory: Directory.Cache,
         });
         await Share.share({
-          title: `Invoice ${invoice?.invoice_number || ""}`,
+          title: `Invoice #${invoice?.invoice_number || ""}`,
+          text: `Invoice #${invoice?.invoice_number} from ${vendor?.vendor_name || 'Store'}`,
           url: savedFile.uri,
           dialogTitle: "Share Invoice",
         });
+      } else if (navigator.canShare && navigator.share) {
+        const blob = await (await fetch(base64Data)).blob();
+        const file = new File([blob], fileName, { type: "image/jpeg" });
+
+        if (navigator.canShare({ files: [file] })) {
+          await navigator.share({
+            title: `Invoice #${invoice?.invoice_number || ""}`,
+            text: `Invoice #${invoice?.invoice_number} total ₹${invoice?.grand_total}`,
+            files: [file],
+          });
+        } else {
+          const link = document.createElement("a");
+          link.download = fileName;
+          link.href = base64Data;
+          link.click();
+        }
       } else {
-        window.print();
+        const link = document.createElement("a");
+        link.download = fileName;
+        link.href = base64Data;
+        link.click();
       }
+      toast.dismiss(toastId);
+      toast.success("Invoice shared successfully!");
     } catch (err) {
-      toast.error("Sharing failed: " + err.message);
+      toast.dismiss(toastId);
+      if (err.name !== "AbortError") {
+        toast.error("Sharing failed: " + err.message);
+      }
     } finally {
       setIsCapturing(false);
     }
@@ -356,7 +578,10 @@ export default function InvoiceView() {
   }
 
   return (
-    <div className="space-y-2.5 max-w-5xl mx-auto">
+    <div
+      className="flex flex-col gap-2.5 max-w-5xl mx-auto"
+      style={{ minHeight: "calc(100dvh - 2rem)" }}
+    >
       {/* Top Toolbar */}
       <div className="no-print flex items-center justify-between flex-wrap gap-2 border-b border-border/60 pb-2">
         <div className="flex items-center gap-2">
@@ -436,6 +661,39 @@ export default function InvoiceView() {
             </Button>
           </div>
 
+          {/* Open EMI Calculator Button */}
+          <Button
+            variant="default"
+            size="sm"
+            onClick={handleOpenEmiCalculator}
+            className="h-8 px-2.5 text-xs gap-1.5 font-semibold rounded-lg shadow-xs bg-[#004C8F] text-white hover:bg-[#003B70]"
+          >
+            <Calculator className="w-3.5 h-3.5" />
+            <span>Generate EMI</span>
+          </Button>
+
+          {/* Edit Add-ons Button */}
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => setIsEditDialogOpen(true)}
+            className="h-8 px-2.5 text-xs gap-1.5 font-medium rounded-lg shadow-none"
+          >
+            <Edit3 className="w-3.5 h-3.5" />
+            <span>Edit Add-ons</span>
+          </Button>
+
+          {/* Print Button */}
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={handlePrint}
+            className="h-8 px-2.5 text-xs gap-1.5 font-medium rounded-lg shadow-none"
+          >
+            <Printer className="w-3.5 h-3.5" />
+            <span>Print</span>
+          </Button>
+
           {/* Action Buttons */}
           <Button
             variant="outline"
@@ -463,7 +721,7 @@ export default function InvoiceView() {
             size="sm"
             onClick={handleNativeShare}
             disabled={isCapturing}
-            className="h-8 px-3 text-xs gap-1.5 font-semibold rounded-lg shadow-none"
+            className="h-8 px-3 text-xs gap-1.5 font-semibold rounded-lg shadow-none bg-[#004C8F] text-white hover:bg-[#003B70]"
           >
             {isCapturing ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Share2 className="w-3.5 h-3.5 stroke-[2.2]" />}
             <span>Share</span>
@@ -501,20 +759,192 @@ export default function InvoiceView() {
         </div>
       </div>
 
-      {/* Viewport Frame with Callback Ref */}
+      {/* EMI & Tenure Prompt Modal */}
+      <Dialog open={isEmiModalOpen} onOpenChange={setIsEmiModalOpen}>
+        <DialogContent className="max-w-sm p-4 space-y-3">
+          <DialogHeader className="space-y-1">
+            <DialogTitle className="text-sm font-bold flex items-center gap-1.5">
+              <Calculator className="w-4 h-4 text-[#004C8F]" />
+              Tenure &amp; Net Loan Amount
+            </DialogTitle>
+          </DialogHeader>
+          <div className="space-y-3 py-1 text-xs">
+            <p className="text-muted-foreground text-[11px]">
+              Review or adjust tenure and total net loan amount before generating schedule.
+            </p>
+            <div className="space-y-1">
+              <label className="font-semibold text-foreground">Tenure (Months)</label>
+              <input
+                type="number"
+                min="1"
+                max="60"
+                value={inputTenure}
+                onChange={(e) => handleTenureChange(e.target.value)}
+                placeholder="e.g. 12"
+                className="w-full px-2.5 py-1.5 bg-background border border-border rounded font-mono text-foreground focus:outline-none focus:ring-1 focus:ring-primary"
+              />
+            </div>
+            <div className="space-y-1">
+              <label className="font-semibold text-foreground">Net Loan Amount (₹)</label>
+              <input
+                type="number"
+                min="0"
+                step="100"
+                value={inputNetLoan}
+                onChange={(e) => setInputNetLoan(e.target.value)}
+                placeholder="e.g. 45000"
+                className="w-full px-2.5 py-1.5 bg-background border border-border rounded font-mono text-foreground focus:outline-none focus:ring-1 focus:ring-primary"
+              />
+            </div>
+          </div>
+          <DialogFooter className="gap-2 pt-2">
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setIsEmiModalOpen(false)}
+              className="h-8 text-xs px-3"
+            >
+              Cancel
+            </Button>
+            <Button
+              size="sm"
+              onClick={handleConfirmEmiCalc}
+              className="h-8 text-xs px-4 bg-[#004C8F] text-white hover:bg-[#003B70]"
+            >
+              Open Calculator
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Edit Add-ons Dialog */}
+      <Dialog open={isEditDialogOpen} onOpenChange={setIsEditDialogOpen}>
+        <DialogContent className="max-w-md p-4">
+          <DialogHeader>
+            <DialogTitle className="text-sm font-bold">Edit Add-ons & Insurance</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-3 py-2">
+            <p className="text-[11px] text-muted-foreground">
+              Select or deselect add-ons for invoice <span className="font-mono font-bold text-foreground">{invoice?.invoice_number}</span>:
+            </p>
+            <div className="space-y-2">
+              <div className="p-2.5 rounded-md border border-border/80 bg-background flex items-center justify-between text-xs">
+                <span className="font-semibold text-foreground">Insurance Eligible</span>
+                <div className="flex bg-muted/60 p-0.5 rounded-md border border-border">
+                  <button
+                    type="button"
+                    onClick={() => setInsuranceEligible("Yes")}
+                    className={`px-3 py-1 text-[11px] font-bold rounded transition-colors ${
+                      insuranceEligible === "Yes" ? 'bg-[#004C8F] text-white shadow-xs' : 'text-muted-foreground hover:text-foreground'
+                    }`}
+                  >
+                    Yes
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setInsuranceEligible("No")}
+                    className={`px-3 py-1 text-[11px] font-bold rounded transition-colors ${
+                      insuranceEligible === "No" ? 'bg-destructive text-white shadow-xs' : 'text-muted-foreground hover:text-foreground'
+                    }`}
+                  >
+                    No
+                  </button>
+                </div>
+              </div>
+
+              <div
+                onClick={() => calculatedAcko && insuranceEligible === "Yes" && toggleAddonSelection("acko_mobile")}
+                className={`p-2.5 rounded-md border flex items-center justify-between text-xs cursor-pointer transition-all ${
+                  insuranceEligible === "No"
+                    ? 'opacity-50 bg-muted/20 border-border/40 cursor-not-allowed'
+                    : selectedAddons.includes("acko_mobile")
+                    ? 'bg-primary/10 border-primary/50 text-foreground font-medium'
+                    : 'bg-background border-border/80 text-muted-foreground hover:border-border'
+                }`}
+              >
+                <div className="flex items-center gap-2 min-w-0">
+                  <input
+                    type="checkbox"
+                    checked={insuranceEligible === "Yes" && selectedAddons.includes("acko_mobile")}
+                    onChange={() => {}}
+                    disabled={!calculatedAcko || insuranceEligible === "No"}
+                    className="rounded border-border accent-primary cursor-pointer"
+                  />
+                  <div className="truncate">
+                    <p className="font-semibold text-xs truncate">ACKO ADLD MOBILE INSURANCE</p>
+                    <p className="text-[10px] text-muted-foreground">
+                      {insuranceEligible === "No" ? 'Disabled (Insurance Eligible: No)' : calculatedAcko ? 'Auto bracket amount' : 'Out of range'}
+                    </p>
+                  </div>
+                </div>
+                <span className="font-bold text-xs shrink-0">
+                  {insuranceEligible === "Yes" && calculatedAcko ? `₹${calculatedAcko.amount.toLocaleString("en-IN")}` : '—'}
+                </span>
+              </div>
+
+              {AVAILABLE_ADDONS.map(addon => {
+                const isChecked = selectedAddons.includes(addon.id) || selectedAddons.includes(addon.name);
+                return (
+                  <div
+                    key={addon.id}
+                    onClick={() => toggleAddonSelection(addon.id)}
+                    className={`p-2.5 rounded-md border flex items-center justify-between text-xs cursor-pointer transition-all ${
+                      isChecked
+                        ? 'bg-primary/10 border-primary/50 text-foreground font-medium'
+                        : 'bg-background border-border/80 text-muted-foreground hover:border-border'
+                    }`}
+                  >
+                    <div className="flex items-center gap-2 min-w-0">
+                      <input
+                        type="checkbox"
+                        checked={isChecked}
+                        onChange={() => {}}
+                        className="rounded border-border accent-primary cursor-pointer"
+                      />
+                      <span className="truncate text-xs">{addon.name}</span>
+                    </div>
+                    <span className="font-semibold text-xs shrink-0">₹{addon.amount.toLocaleString("en-IN")}</span>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+          <DialogFooter className="gap-2 pt-2">
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setIsEditDialogOpen(false)}
+              className="h-8 text-xs px-3"
+            >
+              Cancel
+            </Button>
+            <Button
+              size="sm"
+              onClick={handleSaveAddons}
+              disabled={updateAddonsMutation.isPending}
+              className="h-8 text-xs px-4"
+            >
+              {updateAddonsMutation.isPending && <Loader2 className="w-3.5 h-3.5 animate-spin mr-1.5" />}
+              Save Changes
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Viewport Frame with printable container ID */}
       <div
         ref={setContainerRef}
-        className="w-full flex justify-center overflow-x-hidden overflow-y-auto rounded-xl bg-muted/20 border border-border/60 py-3 px-1 print:p-0 print:m-0 print:border-none print:bg-transparent"
-        style={{ minHeight: "calc(100vh - 115px)" }}
+        className="flex-1 w-full flex justify-center items-start overflow-x-hidden overflow-y-auto rounded-xl bg-muted/20 border border-border/60 py-3 px-1 print:p-0 print:m-0 print:border-none print:bg-transparent"
       >
         <div
+          id="printable-invoice-container"
           ref={invoiceRef}
           style={{
             zoom: zoom,
             transform: typeof CSS !== "undefined" && CSS.supports && CSS.supports("zoom: 1") ? undefined : `scale(${zoom})`,
             transformOrigin: "top center",
           }}
-          className="shadow-sm rounded overflow-hidden print:!transform-none print:!zoom-100"
+          className="shadow-sm rounded overflow-hidden print:overflow-visible print:shadow-none print:rounded-none"
         >
           <InvoiceTemplate invoice={invoice} vendor={vendor} stampScale={stampScale} />
         </div>

@@ -1,4 +1,5 @@
-import React, { useState } from "react";
+// src/pages/VendorSettings.jsx
+import React, { useState, useRef, forwardRef } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { VendorProfile } from "@/api/vendorProfiles";
 import { uploadStamp } from "@/api/storage";
@@ -17,6 +18,7 @@ import {
   Info,
   Store,
   RotateCw,
+  Wand2,
 } from "lucide-react";
 import { toast } from "sonner";
 import {
@@ -24,6 +26,7 @@ import {
   DialogContent,
   DialogHeader,
   DialogTitle,
+  DialogDescription,
   DialogFooter,
 } from "@/components/ui/dialog";
 
@@ -32,63 +35,191 @@ const getVendorCode = (v) => (v?.address || "").trim().toUpperCase();
 const hasRealName = (v) =>
   v?.vendor_name && !isCdapCode(v.vendor_name) && v.vendor_name.trim() !== "";
 
+// Pixelcut-style advanced client-side background removal & ink isolation
+async function removeBackgroundFromUrl(imageUrl) {
+  return new Promise((resolve) => {
+    const img = new Image();
+    img.crossOrigin = "anonymous";
+    img.onload = () => {
+      try {
+        const canvas = document.createElement("canvas");
+        canvas.width = img.width;
+        canvas.height = img.height;
+        const ctx = canvas.getContext("2d");
+        ctx.drawImage(img, 0, 0);
+
+        const imgData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+        const data = imgData.data;
+
+        let cornerTotal = 0;
+        const sampleCorners = [
+          [0, 0], [img.width - 1, 0], [0, img.height - 1], [img.width - 1, img.height - 1]
+        ];
+        sampleCorners.forEach(([x, y]) => {
+          const idx = (y * img.width + x) * 4;
+          cornerTotal += (data[idx] + data[idx + 1] + data[idx + 2]) / 3;
+        });
+        const bgBrightness = cornerTotal / sampleCorners.length;
+        const threshold = Math.min(Math.max(bgBrightness - 15, 160), 235);
+
+        for (let i = 0; i < data.length; i += 4) {
+          const r = data[i];
+          const g = data[i + 1];
+          const b = data[i + 2];
+          const luminance = 0.299 * r + 0.587 * g + 0.114 * b;
+
+          if (luminance >= threshold) {
+            data[i + 3] = 0;
+          } else {
+            if (luminance > threshold - 35) {
+              const alphaFactor = (threshold - luminance) / 35;
+              data[i + 3] = Math.round(255 * alphaFactor);
+            } else {
+              data[i + 3] = 255;
+            }
+
+            const darken = 0.75;
+            data[i] = Math.round(r * darken);
+            data[i + 1] = Math.round(g * darken);
+            data[i + 2] = Math.round(b * darken);
+          }
+        }
+
+        ctx.putImageData(imgData, 0, 0);
+        canvas.toBlob((blob) => {
+          if (blob) {
+            const processedFile = new File([blob], "stamp_transparent.png", { type: "image/png" });
+            resolve(processedFile);
+          } else {
+            resolve(null);
+          }
+        }, "image/png");
+      } catch (err) {
+        console.warn("Background removal processing error:", err);
+        resolve(null);
+      }
+    };
+    img.onerror = () => resolve(null);
+    img.src = imageUrl;
+  });
+}
+
 function StampUploader({ stampUrl, onUploaded }) {
   const [uploading, setUploading] = useState(false);
+  const [processing, setProcessing] = useState(false);
+  const fileInputRef = useRef(null);
 
-  const handleChange = async (e) => {
+  // Handle new file upload from device
+  const handleFileSelected = async (e) => {
     const file = e.target.files?.[0];
     if (!file) return;
-    setUploading(true);
+
     try {
+      setUploading(true);
       const { file_url } = await uploadStamp(file);
       onUploaded(file_url);
-      toast.success("Stamp uploaded");
+      toast.success("Stamp uploaded successfully!");
     } catch (err) {
       toast.error("Upload failed: " + err.message);
+    } finally {
+      setUploading(false);
+      e.target.value = "";
     }
-    setUploading(false);
   };
 
+  // Handle clearing background directly on the currently uploaded stamp image
+  const handleClearExistingBackground = async () => {
+    if (!stampUrl) {
+      toast.error("Please upload a stamp image first.");
+      return;
+    }
+
+    setProcessing(true);
+    try {
+      const processedFile = await removeBackgroundFromUrl(stampUrl);
+      if (!processedFile) throw new Error("Failed to process image background");
+
+      const { file_url } = await uploadStamp(processedFile);
+      onUploaded(file_url);
+      toast.success("Background cleared successfully!");
+    } catch (err) {
+      toast.error("Background removal failed: " + err.message);
+    } finally {
+      setProcessing(false);
+    }
+  };
+
+  const isBusy = uploading || processing;
+
   return (
-    <div className="flex items-center gap-2.5">
+    <div className="flex items-center gap-3">
       {stampUrl ? (
-        <div className="relative shrink-0">
-          <img
-            src={stampUrl}
-            alt="Stamp"
-            className="w-12 h-12 object-contain border border-border rounded bg-muted/20 p-1"
-          />
-          <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600 absolute -top-1 -right-1" />
+        <div className="relative shrink-0 group">
+          {/* Stamp Preview Container: Solid White Background with Soft Shadow */}
+          <div className="w-12 h-12 border border-border rounded-lg bg-white shadow-md flex items-center justify-center p-1">
+            <img
+              src={stampUrl}
+              alt="Stamp"
+              className="w-full h-full object-contain"
+            />
+          </div>
+          <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600 absolute -top-1 -right-1 bg-background rounded-full" />
         </div>
       ) : (
-        <div className="w-12 h-12 border border-dashed border-border rounded flex items-center justify-center text-muted-foreground text-[9px] text-center p-1 leading-tight shrink-0">
+        <div className="w-12 h-12 border border-dashed border-border rounded-lg flex items-center justify-center text-muted-foreground text-[9px] text-center p-1 leading-tight shrink-0 bg-muted/20">
           No seal
         </div>
       )}
-      <div className="space-y-0.5 min-w-0">
-        <label className="cursor-pointer inline-block">
-          <input
-            type="file"
-            accept="image/jpeg,image/png,image/heic"
-            className="hidden"
-            onChange={handleChange}
-            disabled={uploading}
-          />
+
+      <div className="space-y-1.5 min-w-0">
+        <input
+          ref={fileInputRef}
+          type="file"
+          accept="image/jpeg,image/png,image/heic"
+          className="hidden"
+          onChange={handleFileSelected}
+          disabled={isBusy}
+        />
+        
+        <div className="flex items-center gap-1.5">
+          {/* Upload Button */}
           <Button
             type="button"
             variant="outline"
             size="sm"
-            asChild
-            disabled={uploading}
-            className="h-6 px-2 text-[10px] gap-1 rounded shadow-none"
+            onClick={() => fileInputRef.current?.click()}
+            disabled={isBusy}
+            className="h-7 px-2.5 text-[10px] gap-1 rounded shadow-none"
           >
-            <span>
-              {uploading ? <Loader2 className="w-3 h-3 animate-spin" /> : <Upload className="w-3 h-3" />}
-              <span>{uploading ? "Uploading..." : "Select Seal"}</span>
-            </span>
+            {uploading ? (
+              <Loader2 className="w-3 h-3 animate-spin text-primary" />
+            ) : (
+              <Upload className="w-3 h-3 text-primary" />
+            )}
+            <span>Upload</span>
           </Button>
-        </label>
-        <p className="text-[9px] text-muted-foreground leading-none">JPG, PNG, or HEIC</p>
+
+          {/* Clear Background Button (Works on existing uploaded image) */}
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            onClick={handleClearExistingBackground}
+            disabled={isBusy || !stampUrl}
+            className="h-7 px-2.5 text-[10px] gap-1 rounded shadow-none border-primary/40 text-primary hover:bg-primary/10"
+          >
+            {processing ? (
+              <Loader2 className="w-3 h-3 animate-spin text-primary" />
+            ) : (
+              <Wand2 className="w-3 h-3 text-primary" />
+            )}
+            <span>{processing ? "Clearing..." : "Clear Background"}</span>
+          </Button>
+        </div>
+
+        <p className="text-[9px] text-muted-foreground leading-none">
+          {stampUrl ? "Click Clear Background to remove paper background" : "Upload an image to enable background clearing"}
+        </p>
       </div>
     </div>
   );
@@ -215,7 +346,7 @@ function EditVendorForm({ initial, onSave, onCancel, isSaving }) {
         <input
           value={form.vendor_name}
           onChange={(e) => setForm((p) => ({ ...p, vendor_name: e.target.value }))}
-          placeholder="e.g. Siva Enterprises"
+          placeholder="e.g. XXX Enterprises"
           className="w-full rounded border border-border bg-background px-2 py-1 text-xs outline-none focus:border-primary font-medium"
         />
       </div>
@@ -464,11 +595,13 @@ export default function VendorSettings() {
                     </div>
 
                     {v.stamp_url ? (
-                      <img
-                        src={v.stamp_url}
-                        alt="seal"
-                        className="w-10 h-10 object-contain rounded border border-border/70 p-0.5 shrink-0 bg-muted/20"
-                      />
+                      <div className="w-10 h-10 border border-border/70 rounded bg-white shadow-sm flex items-center justify-center p-0.5 shrink-0">
+                        <img
+                          src={v.stamp_url}
+                          alt="seal"
+                          className="w-full h-full object-contain"
+                        />
+                      </div>
                     ) : (
                       <div className="w-10 h-10 border border-dashed border-border/60 rounded flex items-center justify-center text-muted-foreground/40 text-[8px] shrink-0">
                         No seal
@@ -510,6 +643,9 @@ export default function VendorSettings() {
             <DialogTitle className="text-sm font-bold">
               {isAdding ? "Register New Vendor" : "Edit Vendor Details"}
             </DialogTitle>
+            <DialogDescription className="text-[11px] text-muted-foreground">
+              {isAdding ? "Add a new merchant configuration." : "Update your shop credentials and seal."}
+            </DialogDescription>
           </DialogHeader>
           {isAdding ? (
             <AddVendorForm
@@ -536,6 +672,9 @@ export default function VendorSettings() {
         <DialogContent className="max-w-xs p-4 gap-2.5">
           <DialogHeader className="space-y-0.5">
             <DialogTitle className="text-sm font-bold">Edit Vendor Profile?</DialogTitle>
+            <DialogDescription className="text-[11px] text-muted-foreground">
+              Confirm modifying this merchant record.
+            </DialogDescription>
           </DialogHeader>
           <p className="text-xs text-muted-foreground leading-tight">
             Modify profile for{" "}
@@ -569,13 +708,16 @@ export default function VendorSettings() {
         <DialogContent className="max-w-xs p-4 gap-2.5">
           <DialogHeader className="space-y-0.5">
             <DialogTitle className="text-sm font-bold">Delete Vendor Profile?</DialogTitle>
+            <DialogDescription className="text-[11px] text-muted-foreground">
+              This action cannot be undone.
+            </DialogDescription>
           </DialogHeader>
           <p className="text-xs text-muted-foreground leading-tight">
             Permanently delete{" "}
             <span className="font-semibold text-foreground">
               {deleteConfirm?.vendor_name || getVendorCode(deleteConfirm)}
             </span>
-            ? Existing invoices will retain their snapshot details.
+            ? 
           </p>
           <DialogFooter className="gap-1.5 pt-1 sm:justify-end">
             <Button

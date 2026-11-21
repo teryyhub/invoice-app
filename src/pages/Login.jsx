@@ -1,13 +1,13 @@
 // src/pages/Login.jsx
-import { useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { useState, useEffect } from "react";
+import { useNavigate, Link } from "react-router-dom";
 import { useAuth } from "@/lib/AuthContext";
 import { FileText, Chrome, ShieldCheck, Loader2 } from "lucide-react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 
 export default function Login() {
-  const { signIn, signUp, signInWithGoogle } = useAuth();
+  const { user, isLoadingAuth, signIn, signUp, signInWithGoogle } = useAuth();
   const navigate = useNavigate();
 
   const [isSignUp, setIsSignUp] = useState(false);
@@ -19,14 +19,22 @@ export default function Login() {
   const [loading, setLoading] = useState(false);
   const [message, setMessage] = useState("");
 
+  useEffect(() => {
+    if (user && !isLoadingAuth) {
+      navigate("/dashboard", { replace: true });
+    }
+  }, [user, isLoadingAuth, navigate]);
+
   const handleGoogleLogin = async () => {
+    setError("");
+    setLoading(true);
     try {
-      // If running inside Capacitor APK, specify native deep-link redirect
-      const isCapacitor = window.location.protocol === "capacitor:";
-      const redirectTo = isCapacitor ? "com.sivcholainv.app://auth-callback" : undefined;
-      await signInWithGoogle(redirectTo);
+      await signInWithGoogle();
+      navigate("/dashboard", { replace: true });
     } catch (err) {
       setError(err.message || "Google sign-in failed.");
+    } finally {
+      setLoading(false);
     }
   };
 
@@ -70,7 +78,7 @@ export default function Login() {
           }
         }
 
-        navigate("/", { replace: true });
+        navigate("/dashboard", { replace: true });
       }
     } catch (err) {
       setError(err.message || "Something went wrong.");
@@ -88,7 +96,7 @@ export default function Login() {
             <FileText className="w-4 h-4 stroke-[2.2]" />
           </div>
           <h1 className="text-base font-bold tracking-tight text-foreground leading-tight">
-            Siva's Chola
+            CM Invoice
           </h1>
           <p className="text-[11px] text-muted-foreground leading-tight">
             {isSignUp ? "Create merchant account" : "Sign in to your ledger"}
@@ -197,6 +205,7 @@ export default function Login() {
             <Button
               type="button"
               variant="outline"
+              disabled={loading}
               onClick={handleGoogleLogin}
               className="w-full h-8 px-2.5 text-xs gap-1.5 font-medium rounded-lg shadow-none"
             >
@@ -236,6 +245,21 @@ export default function Login() {
                   <ShieldCheck className="w-3.5 h-3.5" />
                 </button>
               )}
+            </div>
+
+            {/* Public Home, Privacy Policy & Terms links */}
+            <div className="flex items-center justify-center gap-2.5 pt-1.5 border-t border-border/50 text-[10px] text-muted-foreground">
+              <Link to="/" className="hover:text-primary hover:underline">
+                Home
+              </Link>
+              <span>•</span>
+              <Link to="/privacypolicy" className="hover:text-primary hover:underline">
+                Privacy Policy
+              </Link>
+              <span>•</span>
+              <Link to="/termsofservice" className="hover:text-primary hover:underline">
+                Terms of Service
+              </Link>
             </div>
           </CardContent>
         </Card>
