@@ -53,6 +53,9 @@ function useLoadingTimeout(isLoading, timeoutSeconds = 10) {
 const handledUrls = new Set();
 const exchangedCodes = new Set();
 
+// Paths whose pages process their own auth links (one-time codes)
+const SELF_HANDLED_AUTH_PATHS = ["/admin-callback", "/reset-password", "/verify"];
+
 function NativeAppHandler() {
   const navigate = useNavigate();
   const location = useLocation();
@@ -150,6 +153,9 @@ function WebAuthCallbackHandler() {
   useEffect(() => {
     if (Capacitor.isNativePlatform()) return;
 
+    // Admin / reset / verify pages handle their own links; don't consume their code
+    if (SELF_HANDLED_AUTH_PATHS.includes(location.pathname)) return;
+
     const params = new URLSearchParams(location.search);
     const code = params.get("code");
     if (!code || exchangedCodes.has(code)) return;
@@ -178,7 +184,7 @@ function WebAuthCallbackHandler() {
     return () => {
       cancelled = true;
     };
-  }, [location.search, navigate]);
+  }, [location.pathname, location.search, navigate]);
 
   return null;
 }

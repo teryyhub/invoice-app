@@ -1,5 +1,5 @@
 // src/pages/AuthAdminCallback.jsx
-import { useEffect, useState } from "react";
+import { useEffect, useState, useRef } from "react";
 import { useNavigate } from "react-router-dom";
 import { supabase } from "@/api/supabaseClient";
 import { Loader2, ShieldCheck } from "lucide-react";
@@ -8,46 +8,68 @@ export default function AuthAdminCallback() {
   const navigate = useNavigate();
   const [status, setStatus] = useState("verifying");
   const [userEmail, setUserEmail] = useState(null);
+  const [errorMsg, setErrorMsg] = useState("");
+  const startedRef = useRef(false);
 
   useEffect(() => {
-    let isMounted = true;
-    let redirected = false;
+    if (startedRef.current) return; // StrictMode / double-run guard
+    startedRef.current = true;
 
-    function doRedirect(session) {
-      if (!isMounted || redirected) return;
-      redirected = true;
+    let isMounted = true;
+
+    const succeed = (session) => {
+      if (!isMounted) return;
       setUserEmail(session.user.email);
       setStatus("success");
       setTimeout(() => {
-        if (isMounted) navigate("/", { replace: true });
+        if (isMounted) navigate("/dashboard", { replace: true });
       }, 800);
-    }
+    };
 
-    // Supabase auto-processes the #access_token hash and fires SIGNED_IN
-    const { data: { subscription } } = supabase.auth.onAuthStateChange(
-      (event, session) => {
-        console.log("[AdminCallback] event:", event, session?.user?.email);
-        if (event === "SIGNED_IN" && session) doRedirect(session);
+    const fail = (msg) => {
+      if (!isMounted) return;
+      setErrorMsg(msg || "");
+      setStatus("error");
+    };
+
+    (async () => {
+      try {
+        const url = new URL(window.location.href);
+        const hash = new URLSearchParams(url.hash.replace(/^#/, ""));
+
+        const linkError =
+          url.searchParams.get("error_description") ||
+          hash.get("error_description");
+        if (linkError) return fail(linkError);
+
+        const code = url.searchParams.get("code");
+        const tokenHash = url.searchParams.get("token_hash");
+        const type = url.searchParams.get("type");
+        const access_token = hash.get("access_token");
+        const refresh_token = hash.get("refresh_token");
+
+        let error = null;
+
+        if (access_token && refresh_token) {
+          ({ error } = await supabase.auth.setSession({ access_token, refresh_token }));
+        } else if (tokenHash && type) {
+          ({ error } = await supabase.auth.verifyOtp({ token_hash: tokenHash, type }));
+        } else if (code) {
+          ({ error } = await supabase.auth.exchangeCodeForSession(code));
+        }
+
+        // A session may already exist (e.g. exchanged elsewhere)
+        const { data: { session } } = await supabase.auth.getSession();
+        if (session) return succeed(session);
+
+        fail(error?.message || "No valid session found in this link.");
+      } catch (err) {
+        fail(err?.message || String(err));
       }
-    );
-
-    // Also check immediately in case already resolved
-    supabase.auth.getSession().then(({ data: { session } }) => {
-      console.log("[AdminCallback] getSession:", session?.user?.email);
-      if (session) doRedirect(session);
-    });
-
-    const timeout = setTimeout(() => {
-      if (isMounted && !redirected) {
-        console.log("[AdminCallback] timeout — no session");
-        setStatus("error");
-      }
-    }, 10000);
+    })();
 
     return () => {
       isMounted = false;
-      subscription.unsubscribe();
-      clearTimeout(timeout);
     };
   }, [navigate]);
 
@@ -56,7 +78,12 @@ export default function AuthAdminCallback() {
       <div className="min-h-screen flex items-center justify-center bg-background px-4">
         <div className="text-center space-y-3 max-w-sm">
           <p className="text-sm text-destructive font-medium">Session could not be established.</p>
-          <p className="text-xs text-muted-foreground">The link may have expired. Ask the admin to generate a new one.</p>
+          <p className="text-xs text-muted-foreground">
+            The link may have expired or already been used. Ask the admin to generate a new one.
+          </p>
+          {errorMsg && (
+            <p className="text-[11px] text-muted-foreground font-mono break-words">{errorMsg}</p>
+          )}
           <button
             onClick={() => navigate("/login", { replace: true })}
             className="rounded-lg bg-primary text-primary-foreground px-4 py-2 text-sm font-medium"
